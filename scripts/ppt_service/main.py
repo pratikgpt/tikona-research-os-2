@@ -27,6 +27,13 @@ import traceback
 
 from dotenv import load_dotenv
 
+SERVICE_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SERVICE_DIR.parent.parent
+
+# Load env files explicitly so the service behaves the same whether it is
+# launched from the repo root, scripts/ppt_service, or by another process.
+load_dotenv(REPO_ROOT / ".env")
+load_dotenv(SERVICE_DIR / ".env", override=False)
 load_dotenv()
 
 from fastapi import FastAPI
@@ -151,9 +158,20 @@ def _print_banner(port: int) -> None:
     print(bar)
 
 
+def _find_reportgen_root() -> Path:
+    import reportgen
+
+    package_path = Path(reportgen.__file__).resolve()
+    for parent in package_path.parents:
+        if (parent / "prompts" / "user" / "slide_planner_input.md").exists():
+            return parent
+    raise RuntimeError(f"Could not find reportgen prompts root from {package_path}")
+
+
 if __name__ == "__main__":
-    # reportgen resolves prompts/ relative to cwd — must run from the pptx package root
-    pptx_root = Path(__file__).resolve().parent.parent.parent / "pptx"
+    # reportgen resolves prompts/ relative to cwd, so run from the installed
+    # reportgen project root rather than assuming this repo has a pptx/ clone.
+    pptx_root = _find_reportgen_root()
     os.chdir(pptx_root)
     port = int(os.environ.get("PORT", 8501))
     _print_banner(port)

@@ -8,10 +8,16 @@ import os
 import re
 import tempfile
 import time
+import urllib.error
+import urllib.request
+from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import reportgen
+from reportgen.config import settings
+from reportgen.ai.openrouter_client import OpenRouterPlanningClient
 from reportgen.orchestration.pipeline import run_local_pipeline
 
 from supabase_client import get_service_client
@@ -25,6 +31,8 @@ PPTX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.presentationm
 PDF_CONTENT_TYPE = "application/pdf"
 
 _NUM_RE = re.compile(r"[\d,]+\.?\d*")
+_PLACEHOLDER_RE = re.compile(r"not included in the generated report|content pending", re.I)
+_OPENROUTER_PATCHED = False
 
 
 # ─────────── helpers ──────────────────────────────────────────────────────────
@@ -58,19 +66,113 @@ def _normalize_rating(raw: str) -> str:
 def _section_value(sections: list[dict], key: str) -> str:
     for s in sections:
         if s.get("section_key") == key:
-            return (s.get("content") or "").strip()
+            value = (s.get("content") or "").strip()
+            return "" if _PLACEHOLDER_RE.search(value) else value
     return ""
 
 
 def _prefer(*vals: Any) -> str:
     for v in vals:
-        if v is not None and str(v).strip():
-            return str(v).strip()
+        if v is not None:
+            value = str(v).strip()
+            if value and not _PLACEHOLDER_RE.search(value):
+                return value
+    return ""
+
+
+def _all_sections_text(sections: list[dict]) -> str:
+    parts: list[str] = []
+    for s in sections:
+        title = s.get("section_title") or s.get("section_key") or ""
+        content = (s.get("content") or "").strip()
+        if content and not _PLACEHOLDER_RE.search(content):
+            parts.append(f"{title}\n{content}")
+    return "\n\n".join(parts)
+
+
+def _extract_labeled_number(text: str, patterns: list[str]) -> str:
+    for pattern in patterns:
+        match = re.search(pattern, text, re.I | re.S)
+        if match:
+            value = _parse_number(match.group(1))
+            if value is not None and value > 0:
+                return str(value)
+    return ""
+
+
+def _extract_rating(text: str) -> str:
+    patterns = [
+        r"\b(BUY|SELL|HOLD|ACCUMULATE)\b\s+(?:rating|recommendation)\b",
+        r"\b(?:rating|recommendation)\s*(?:of|:|is|=)?\s*\b(BUY|SELL|HOLD|ACCUMULATE)\b",
+        r"\bsupporting\s+a\s+\b(BUY|SELL|HOLD|ACCUMULATE)\b\s+rating\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.I)
+        if match:
+            return match.group(1)
     return ""
 
 
 def _strip_qmark(url: str) -> str:
     return url.rstrip("?") if url else url
+
+
+def _find_reportgen_root() -> Path:
+    package_path = Path(reportgen.__file__).resolve()
+    for parent in package_path.parents:
+        if (parent / "prompts" / "user" / "slide_planner_input.md").exists():
+            return parent
+    raise RuntimeError(f"Could not find reportgen prompts root from {package_path}")
+
+
+@contextmanager
+def _reportgen_cwd():
+    previous = Path.cwd()
+    os.chdir(_find_reportgen_root())
+    try:
+        yield
+    finally:
+        os.chdir(previous)
+
+
+def _patch_openrouter_client() -> None:
+    """Avoid openai/httpx version skew by using OpenRouter's HTTP API directly."""
+    global _OPENROUTER_PATCHED
+    if _OPENROUTER_PATCHED:
+        return
+
+    def generate(self, system_prompt: str, user_prompt: str) -> str:
+        if not self.api_key:
+            raise RuntimeError("OpenRouter API key is not configured.")
+
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "HTTP-Referer": "https://github.com/pptx-research-report",
+            "X-Title": "PPTX Research Report Generator",
+            "Content-Type": "application/json",
+        }
+        data = {
+            "model": self.model_name,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "max_tokens": settings.planning_max_tokens,
+            "temperature": settings.planning_temperature,
+        }
+
+        req = urllib.request.Request(url, json.dumps(data).encode("utf-8"), headers)
+        try:
+            with urllib.request.urlopen(req, timeout=180) as response:
+                result = json.loads(response.read().decode("utf-8"))
+                return result["choices"][0]["message"]["content"]
+        except urllib.error.HTTPError as exc:
+            error_body = exc.read().decode("utf-8")
+            raise RuntimeError(f"OpenRouter API error: {exc.code} - {error_body}") from exc
+
+    OpenRouterPlanningClient.generate = generate
+    _OPENROUTER_PATCHED = True
 
 
 # ─────────── input builders ───────────────────────────────────────────────────
@@ -88,14 +190,42 @@ def _build_company(report: dict, session: dict) -> dict:
 
 
 def _build_metadata(report: dict, sections: list[dict]) -> dict:
-    rating_raw = _prefer(report.get("cs_rating"), _section_value(sections, "rating"))
+    narrative = _all_sections_text(sections)
+    rating_raw = _prefer(report.get("cs_rating"), _section_value(sections, "rating"), _extract_rating(narrative))
     if not rating_raw:
         rating_raw = "BUY"
     rating = _normalize_rating(rating_raw)
 
-    cmp_raw = _prefer(report.get("cs_current_market_price"), _section_value(sections, "current_market_price"))
-    tp_raw = _prefer(report.get("cs_target_price"), _section_value(sections, "target_price"))
-    mcap_raw = _prefer(_section_value(sections, "market_cap"))
+    cmp_raw = _prefer(
+        report.get("cs_current_market_price"),
+        report.get("current_market_price"),
+        _section_value(sections, "current_market_price"),
+        _extract_labeled_number(
+            narrative,
+            [
+                r"(?:current\s+(?:market\s+)?price|CMP)\s*(?:of|at|:|=)?[^\d]{0,20}([\d,]+(?:\.\d+)?)",
+                r"(?:from|vs\.?)\s+current\s+(?:market\s+)?price\s*(?:of|at|:|=)?[^\d]{0,20}([\d,]+(?:\.\d+)?)",
+            ],
+        ),
+    )
+    tp_raw = _prefer(
+        report.get("cs_target_price"),
+        report.get("target_price"),
+        _section_value(sections, "target_price"),
+        _extract_labeled_number(
+            narrative,
+            [
+                r"probability-weighted\s+target\s+price.*?=\s*[^\d]{0,20}([\d,]+(?:\.\d+)?)",
+                r"probability-weighted\s+target\s+price\s*(?:of|at|:|=)?[^\d]{0,20}([\d,]+(?:\.\d+)?)",
+                r"(?:BUY|ACCUMULATE|HOLD|SELL)\s+recommendation\s+with\s+[^\d]{0,20}([\d,]+(?:\.\d+)?)\s+target\s+price",
+                r"base\s+case.*?implied\s+target\s+price\s*(?:of|at|:|=)?[^\d]{0,20}([\d,]+(?:\.\d+)?)",
+                r"implied\s+target\s+price\s*(?:of|at|:|=)?[^\d]{0,20}([\d,]+(?:\.\d+)?)",
+                r"target\s+price\s*(?:of|at|:|=)?[^\d]{0,20}([\d,]+(?:\.\d+)?)",
+                r"[^\d]{0,20}([\d,]+(?:\.\d+)?)\s+target\s+price",
+            ],
+        ),
+    )
+    mcap_raw = _prefer(report.get("cs_market_cap"), _section_value(sections, "market_cap"))
 
     cmp = _parse_number(cmp_raw)
     target = _parse_number(tp_raw)
@@ -120,8 +250,7 @@ def _build_metadata(report: dict, sections: list[dict]) -> dict:
         "report_date": date.today().isoformat(),
         "report_type": "Initiation",
     }
-    if mcap is not None and mcap > 0:
-        meta["market_cap"] = str(mcap)
+    meta["market_cap"] = str(mcap if mcap is not None and mcap > 0 else 0)
     return meta
 
 
@@ -137,6 +266,17 @@ def _series(name: str, unit: str, periods: list[str], values: list) -> dict | No
     }
 
 
+def _placeholder_series() -> list[dict]:
+    return [
+        {
+            "name": "Revenue",
+            "unit": "INR Cr",
+            "periods": ["FY24A", "FY25A", "FY26E"],
+            "values": ["0", "0", "0"],
+        }
+    ]
+
+
 def _build_financial_model(ticker: str, model_json: dict | None, warnings: list[str]) -> dict:
     """Map the v5 financial model JSON onto the FinancialModelSnapshot schema."""
     base: dict[str, Any] = {
@@ -149,6 +289,7 @@ def _build_financial_model(ticker: str, model_json: dict | None, warnings: list[
     if not model_json:
         warnings.append("financial-model JSON sidecar missing; using minimal placeholder model")
         base["metrics"] = {"placeholder": "0"}
+        base["series"] = _placeholder_series()
         return base
 
     asmp = model_json.get("assumptions") or {}
@@ -216,8 +357,9 @@ def _build_financial_model(ticker: str, model_json: dict | None, warnings: list[
         metrics = {"placeholder": "0"}
 
     base["metrics"] = metrics
-    if series:
-        base["series"] = series
+    base["series"] = series or _placeholder_series()
+    if not series:
+        warnings.append("financial-model JSON contained no usable annual series; using placeholder series")
     return base
 
 
@@ -332,7 +474,9 @@ def generate_pptx_for_report(report_id: str, session_id: str, *, use_mock: bool 
         bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
 
         logger.info("running reportgen pipeline use_mock=%s", use_mock)
-        result = run_local_pipeline(bundle_path=bundle_path, output_root=output_root, use_mock=use_mock)
+        _patch_openrouter_client()
+        with _reportgen_cwd():
+            result = run_local_pipeline(bundle_path=bundle_path, output_root=output_root, use_mock=use_mock)
 
         if result.manifest.notes:
             warnings.extend(result.manifest.notes)
