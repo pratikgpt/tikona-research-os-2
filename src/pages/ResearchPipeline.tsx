@@ -363,7 +363,9 @@ export default function ResearchPipeline() {
         sector,
         vaultId
       );
-      const storageResult = await mirrorFinancialModelToStorage(selectedCompany.nse_symbol ?? '');
+      const storageResult = modelResult.storageUrl
+        ? { fileUrl: modelResult.storageUrl }
+        : await mirrorFinancialModelToStorage(selectedCompany.nse_symbol ?? '');
       setFinancialModelStatus('success');
       setFinancialModelFileUrl(storageResult.fileUrl);
       toast.success(`Financial model generated: ${modelResult.fileName}`);

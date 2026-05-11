@@ -30,17 +30,30 @@ CRITICAL LAYOUT CONSTRAINT:
 - Vertical space is VERY LIMITED (~170mm usable height).
 - You MUST keep content compact so it fits within ONE page without clipping.
 - A page typically has 2–4 blocks. 3 is ideal. DO NOT overload a page.
+- EXCEPTION: story_charts pages MUST have EXACTLY 6 chart blocks — see STORY_CHARTS RULES below.
 - Think like an editor working to a 12–13 page initiation deck, not an analyst writing a long memo.
 - If forced to choose, OMIT lower-priority content rather than squeezing everything in.
 
 Content size limits (HARD RULES — violating these will cause clipping):
-- Tables: MAX 8 data rows, MAX 7 columns. Prefer 5-6 rows.
+- Tables: MAX 12 data rows, MAX 7 columns. Prefer 5-6 rows.
 - Bullet lists: MAX 4 items. Each bullet body MAX 2 sentences.
 - Paragraphs: MAX 2 sentences each. Keep body under 45 words.
 - Metric strips: items count MUST be EXACTLY 2, 3, 4, or 5. NEVER use 1, 6, 7, or 8.
 - Prefer fewer, high-impact blocks over many small ones.
-- Never emit more than 1 table and 1 chart on the same page unless the page type explicitly demands both.
+- Never emit more than 1 table and 1 chart on the same page except:
+  story_charts pages can have up to 6 charts (key financial metrics),
+  valuation pages can have chart + scenario + table.
 - Do NOT create placeholder disclosure, analyst-credit, or boilerplate institutional-client blocks.
+
+STORY_CHARTS PAGE RULES (page_type = "story_charts") — MANDATORY:
+- You MUST emit EXACTLY 6 chart blocks. No more, no fewer. This page renders in a 3×2 grid.
+- Use ONLY metric names that appear in the financial model provided. Do NOT invent metric names.
+- Suggested 6 charts: (1) Revenue bar by year, (2) EBITDA bar by year, (3) PAT bar by year,
+  (4) EBITDA Margin line by year, (5) PAT Margin line by year, (6) EPS bar by year.
+  Substitute with available model metrics if the above are not present (check "metrics" list in model JSON).
+- Each chart title must include the unit: e.g. "Revenue (INR Cr) — FY22 to FY26E".
+- Include a short caption as the title's subtitle; these render as figure footnotes.
+- Do NOT include any non-chart blocks on story_charts pages.
 
 SYMMETRY RULE (CRITICAL — your senior will reject asymmetric layouts):
 - All metric card rows MUST fill their grid evenly: 2x1, 3x1, 4x1, or 5x1.
@@ -96,7 +109,7 @@ Block types you can emit (use VARIETY, but do NOT add blocks just for variety):
   BASIC BLOCKS:
   paragraph : { kind: "paragraph", title?, body }  — body MAX 60 words
   bullets   : { kind: "bullets", title?, items: [{title?, body}] }  — MAX 4 items
-  table     : { kind: "table", title?, headers, rows, footnote? }  — MAX 8 rows, MAX 7 cols
+  table     : { kind: "table", title?, headers, rows, footnote?, highlight_rows?: [0,1] }  — MAX 8 rows, MAX 7 cols. highlight_rows is a list of 0-indexed row indices to highlight (default [0]).
   metrics   : { kind: "metrics", title?, items: [{label, value, delta?}] }  — MAX 5 items
   callout   : { kind: "callout", variant: "thesis"|"warn"|"info"|"quote", title?, body }  — body MAX 80 words
   chart     : { kind: "chart", chart_type: "bar"|"line"|"stacked_bar", title?, metrics: [metric names in model], years?: [year labels] }
@@ -106,18 +119,32 @@ Block types you can emit (use VARIETY, but do NOT add blocks just for variety):
   risk      : { kind: "risk", title?, items: [{severity: "high"|"med"|"low", title, body}] }  — for risk pages. MAX 5 items.
   scenario  : { kind: "scenario", title?, cases: [{label, case: "bear"|"base"|"bull", target_price, updown?, description?}] }  — for valuation pages. Exactly 3 cases.
   scorecard : { kind: "scorecard", title?, items: [{name, score: "14", max_score: "15", description?}] }  — for SAARTHI scorecard. MAX 7 items.
-  timeline  : { kind: "timeline", title?, items: [{year, text}] }  — for milestones, history. MAX 6 items.
+  timeline  : { kind: "timeline", title?, items: [{year, text}] }  — for milestones, history. MAX 12 items.
 
 PAGE-TYPE GUIDANCE (use the RIGHT block types for each page):
   cover              → metrics + callout(thesis) + catalyst  (NO table — renderer adds financial summary)
-  story_charts       → chart + chart + metrics OR chart + metrics + callout
+  story_charts       → EXACTLY 6 chart blocks (3×2 grid, no other block types allowed)
   thesis             → callout(thesis) + risk (summarized) + table
   industry           → chart + metrics + risk OR chart + timeline + metrics
   company_overview   → metrics + paragraph + timeline OR metrics + table + timeline
-  business_segments  → chart + table + catalyst OR chart + metrics + catalyst
+  business_segments  → chart + table + catalyst OR chart + metrics + catalyst (Business model, demand drivers, competitive landscape)
   management         → table + bullets + callout
   earnings_forecast  → table + metrics + bullets (state assumptions clearly)
-  financial_highlights → table + chart + metrics
+  financial_highlights → EXACTLY ONE table block (Key Ratios). MANDATORY format:
+    title: "Key Ratios"
+    headers: ["Ratio", "FY22A", "FY23A", "FY24A", "FY25A", "FY26E", "FY27E", "FY28E"]  (use actual years from model)
+    rows (in this order, values from financial model):
+      ["EBITDA Margin", "49.3%", ...],   ← row 0 — highlight
+      ["PAT Margin",    "30.5%", ...],   ← row 1 — highlight
+      ["RoE",           "23.0%", ...],   ← green % auto-colored
+      ["RoCE",          "19.0%", ...],
+      ["RoIC",          "92.0%", ...],   (include only if available in model)
+      ["P/E",           "37.5x", ...],
+      ["P/B",           "8.7x",  ...],
+      ["EV/EBITDA",     "9.0x",  ...]
+    highlight_rows: [0, 1]              ← highlights EBITDA Margin and PAT Margin rows
+    footnote: "E = Tikona Capital Estimates"
+    Do NOT add any other blocks (no charts, no metrics) on this page.
   valuation          → scenario + table + callout + metrics
   scorecard          → scorecard (MUST use scorecard block with progress bars)
   scenario_analysis  → scenario + bullets + metrics

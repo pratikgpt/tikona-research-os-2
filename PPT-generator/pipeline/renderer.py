@@ -43,7 +43,7 @@ def load_brand_css() -> str:
         return ""
 
 
-def load_reference_css(reference_html_path: str | Path) -> str:
+def load_reference_css(_reference_html_path: str | Path) -> str:
     """Legacy shim — kept so orchestrate.py doesn't break."""
     return ""
 
@@ -66,7 +66,7 @@ def _fmt_num(v) -> str:
 
 def _fmt_price(v) -> str:
     if v is None or v == "":
-        return "â€”"
+        return "—"
     if isinstance(v, str):
         m = re.fullmatch(r"\s*₹?\s*([\d,]+(?:\.\d+)?)\s*", v)
         if not m:
@@ -83,11 +83,11 @@ def _present(v) -> bool:
     if v is None:
         return False
     s = str(v).strip()
-    return s not in {"", "â€”", "-", "None", "null"}
+    return s not in {"", "—", "-", "None", "null"}
 
 
 def _html_rupee(v) -> str:
-    return f"&#8377;{_e(_fmt_price(v))}" if _present(v) else "â€”"
+    return f"&#8377;{_e(_fmt_price(v))}" if _present(v) else "—"
 
 
 def _first_present(*values) -> str | None:
@@ -179,7 +179,7 @@ def _render_table(b: TableBlock) -> str:
         for i, h in enumerate(headers)
     )
 
-    rows = b.rows[:8]
+    rows = b.rows[:12]
     trs = []
     last = len(rows) - 1
     for ri, row in enumerate(rows):
@@ -195,7 +195,7 @@ def _render_table(b: TableBlock) -> str:
             )
             continue
 
-        is_highlight = ri == 0 or ri == last
+        is_highlight = ri in (b.highlight_rows or [0])
         row_cls = ' class="tbl-highlight"' if is_highlight else ""
         tds = []
         for ci, c in enumerate(cells):
@@ -322,7 +322,12 @@ def _render_chart(b: ChartBlock, pack: CompanyPack) -> str:
         return _render_donut(b)
     if not pack.financials:
         return ""
-    years = b.years or pack.financials.years
+    # Use block-specified years only if at least one label actually exists in the
+    # model; otherwise fall back to the model's own years to avoid silent no-data.
+    if b.years and any(y in pack.financials.years for y in b.years):
+        years = b.years
+    else:
+        years = pack.financials.years
     series: list[tuple[str, list]] = []
     for m in b.metrics:
         row = pack.financials.get(m)
@@ -571,7 +576,7 @@ def _render_timeline(b: TimelineBlock) -> str:
         f'<div class="key-section-title">{_e(b.title)}</div>' if b.title else ""
     )
     parts = []
-    for it in b.items[:8]:
+    for it in b.items[:12]:
         parts.append(
             f'<div class="timeline-item">'
             f'<div class="timeline-year">{_e(it.year)}</div>'
@@ -608,95 +613,6 @@ def render_block(block: ContentBlock, pack: CompanyPack, idx: int = 0) -> str:
 
 
 # ─── Persistent sidebar (shown on EVERY page) ─────────────────────────────────
-
-def _render_sidebar(pack: CompanyPack) -> str:
-    """Compact market-data sidebar — always filled, never blank."""
-    nar = pack.narrative
-    up = pack.upside_potential_pct
-    up_s = f"+{up}%" if up else "—"
-
-    saarthi_raw = nar.get("saarthi_score", "") or nar.get("saarthi_scorecard", {})
-    if isinstance(saarthi_raw, dict):
-        saarthi = saarthi_raw.get("total_score", "") or saarthi_raw.get("score", "")
-    else:
-        saarthi = saarthi_raw
-
-    rows_html = ""
-    for label, key in [
-        ("P/E (TTM)", "pe_ratio"),
-        ("D/E Ratio", "debt_equity"),
-        ("ROE", "roe"),
-        ("Net D/EBITDA", "net_debt_ebitda"),
-        ("Div Yield", "dividend_yield"),
-    ]:
-        val = nar.get(key, "—") or "—"
-        rows_html += (
-            f'<div class="side-row">'
-            f'<span class="side-label">{label}</span>'
-            f'<span class="side-value">{_e(str(val))}</span>'
-            f'</div>'
-        )
-
-    week_52_h = nar.get("week_52_high", "—") or "—"
-    week_52_l = nar.get("week_52_low", "—") or "—"
-
-    credit_rating = nar.get("credit_rating", "") or nar.get("sp_rating", "")
-    credit_outlook = nar.get("credit_outlook", "Stable")
-
-    card1 = f"""
-    <div class="side-panel-card">
-      <div class="side-metric-title">Target Price</div>
-      <div class="side-metric-value">₹{_e(_fmt_price(pack.target_price))}</div>
-      <div class="side-metric-sub">{_e(up_s)} from CMP ₹{_e(_fmt_price(pack.cmp))}</div>
-      <div class="side-divider"></div>
-      <div class="side-section-hdr">52-Week Range</div>
-      <div class="side-row">
-        <span class="side-label">High</span>
-        <span class="side-value">₹{_e(str(week_52_h))}</span>
-      </div>
-      <div class="side-row">
-        <span class="side-label">Low</span>
-        <span class="side-value">₹{_e(str(week_52_l))}</span>
-      </div>
-      <div class="side-divider"></div>
-      <div class="side-section-hdr">Key Ratios</div>
-      {rows_html}
-    </div>"""
-
-    saarthi_html = ""
-    if saarthi:
-        saarthi_html = f"""
-    <div class="side-panel-card light">
-      <div class="side-section-hdr" style="color:var(--primary-dark);margin-top:0;">SAARTHI Score</div>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:15pt;font-weight:700;
-                  color:var(--primary-dark);line-height:1.1;">{_e(str(saarthi))}</div>
-      <div class="side-metric-sub dark">Proprietary Framework</div>
-      <div class="side-divider dark"></div>
-      <div class="side-row">
-        <span class="side-label dark">Rating</span>
-        <span class="side-value dark" style="color:var(--green);font-weight:700;">
-          {_e(str(pack.rating or '—'))}
-        </span>
-      </div>
-    </div>"""
-
-    credit_html = ""
-    if credit_rating:
-        credit_html = f"""
-    <div class="side-panel-card" style="background:linear-gradient(135deg,#1F4690 0%,#3A5BA0 100%);">
-      <div class="side-section-hdr">Credit Rating</div>
-      <div style="color:var(--accent);font-family:'JetBrains Mono',monospace;
-                  font-size:14pt;font-weight:700;line-height:1.1;">{_e(str(credit_rating))}</div>
-      <div class="side-row">
-        <span class="side-label">Outlook</span>
-        <span class="side-value">{_e(str(credit_outlook))}</span>
-      </div>
-    </div>"""
-
-    return card1 + saarthi_html + credit_html
-
-
-# ─── Auto financial summary table (cover page col 2) ─────────────────────────
 
 def _render_sidebar(pack: CompanyPack) -> str:
     """Compact market-data sidebar that hides empty fields instead of showing filler dashes."""
@@ -767,7 +683,7 @@ def _render_sidebar(pack: CompanyPack) -> str:
       <div class="side-divider dark"></div>
       <div class="side-row">
         <span class="side-label dark">Rating</span>
-        <span class="side-value dark" style="color:var(--green);font-weight:700;">{_e(str(pack.rating or 'â€”'))}</span>
+        <span class="side-value dark" style="color:var(--green);font-weight:700;">{_e(str(pack.rating or 'â€"'))}</span>
       </div>
     </div>""")
 
@@ -787,8 +703,14 @@ def _render_sidebar(pack: CompanyPack) -> str:
 
 
 _FIN_SUMMARY_METRICS = [
-    "Revenue", "EBITDA", "EBITDA Margin", "PAT", "EPS",
-    "EV/EBITDA", "P/E", "ROE",
+    # Income statement
+    "Revenue", "EBITDA", "EBITDA Margin", "PAT", "PAT Margin",
+    # Per-share
+    "EPS",
+    # Valuation multiples
+    "P/E", "P/B", "EV/EBITDA",
+    # Growth rates (computed as YoY % from the rows above)
+    "Revenue Growth", "EBITDA Growth", "PAT Growth",
 ]
 
 
@@ -798,13 +720,48 @@ def _render_cover_fin_table(pack: CompanyPack) -> str:
     fin = pack.financials
     years = fin.years[-6:]  # last 6 years max
 
-    # Find available metrics (case-insensitive partial match)
-    found: list[tuple[str, dict]] = []
+    growth_metrics = {"revenue growth", "ebitda growth", "pat growth"}
+
+    # Pass 1 — collect absolute metric rows in order
+    found: list[tuple[str, dict, bool]] = []  # (display_name, year→value, is_growth)
+    abs_cache: dict[str, dict] = {}           # base_name → year→value (for growth calc)
     for want in _FIN_SUMMARY_METRICS:
+        want_lower = want.lower()
+        if want_lower in growth_metrics:
+            continue
         for row in fin.rows:
-            if want.lower() in row.metric.lower():
-                found.append((row.metric, {y: row.values.get(y) for y in years}))
+            if want_lower in row.metric.lower():
+                vals = {y: row.values.get(y) for y in years}
+                found.append((want, vals, False))
+                abs_cache[want_lower] = vals
                 break
+
+    # Pass 2 — compute YoY growth for Revenue Growth / EBITDA Growth / PAT Growth
+    # Stored as decimals (0.15) so _fmt_num renders them as "15.0%"
+    for want in _FIN_SUMMARY_METRICS:
+        want_lower = want.lower()
+        if want_lower not in growth_metrics:
+            continue
+        base_name = want_lower.replace(" growth", "")
+        base_vals = next(
+            (v for k, v in abs_cache.items() if base_name in k),
+            None,
+        )
+        if base_vals is None:
+            continue
+        growth_vals: dict = {}
+        for i, y in enumerate(years):
+            if i == 0:
+                growth_vals[y] = None
+            else:
+                prev_y = years[i - 1]
+                curr = base_vals.get(y)
+                prev = base_vals.get(prev_y)
+                if curr is not None and prev is not None and prev != 0:
+                    growth_vals[y] = (curr - prev) / abs(prev)
+                else:
+                    growth_vals[y] = None
+        found.append((want, growth_vals, True))
 
     if not found:
         return ""
@@ -814,34 +771,34 @@ def _render_cover_fin_table(pack: CompanyPack) -> str:
         + "".join(f"<th>{_e(y)}</th>" for y in years)
     )
 
-    section_boundaries = {"revenue", "eps", "ev/ebitda", "roe"}
+    # Map exact metric names (lowercased) to the section header that should
+    # appear *before* that metric.  Use exact equality so "revenue" doesn't
+    # accidentally match "revenue growth".
+    section_triggers = {
+        "revenue":        "Income Statement",
+        "eps":            "Per Share Data",
+        "p/e":            "Valuation Multiples",
+        "revenue growth": "Growth Rates",
+    }
     trs = []
-    for ri, (metric, vals) in enumerate(found):
-        is_section = any(k in metric.lower() for k in section_boundaries)
-        if is_section and ri > 0:
+    for ri, (metric, vals, is_growth) in enumerate(found):
+        metric_lower = metric.lower()
+        if ri > 0 and metric_lower in section_triggers:
             colspan = len(years) + 1
-            section_labels = {
-                "revenue": "Income Statement",
-                "eps": "Per Share Data",
-                "ev/ebitda": "Valuation Multiples",
-                "roe": "Return Ratios",
-            }
-            for k, label in section_labels.items():
-                if k in metric.lower():
-                    trs.append(
-                        f'<tr class="tbl-section">'
-                        f'<td colspan="{colspan}">{label}</td>'
-                        f'</tr>'
-                    )
-                    break
+            trs.append(
+                f'<tr class="tbl-section">'
+                f'<td colspan="{colspan}">{section_triggers[metric_lower]}</td>'
+                f'</tr>'
+            )
 
         tds = [f'<td style="text-align:left;font-weight:600;">{_e(metric)}</td>']
         for y in years:
             v = vals.get(y)
-            txt = _fmt_num(v)
-            cls = ""
-            if txt.endswith("%") and not txt.startswith("-"):
-                cls = ' class="green"'
+            txt = "—" if v is None else _fmt_num(v)
+            if txt.endswith("%"):
+                cls = ' class="red"' if txt.startswith("-") else ' class="green"'
+            else:
+                cls = ""
             tds.append(f"<td{cls}>{txt}</td>")
         highlight = ri == 0
         row_cls = ' class="tbl-highlight"' if highlight else ""
@@ -883,55 +840,6 @@ def _mcap_category(pack: CompanyPack) -> str:
         return "Large Cap"
 
 
-def _render_full_header(pack: CompanyPack, report_type: str = "Equity Research") -> str:
-    mcap = pack.narrative.get("market_cap", "—")
-    mcap_cat = _mcap_category(pack)
-    up = pack.upside_potential_pct
-    up_s = f"+{up}%" if up else ""
-    return f"""
-    <div class="report-header">
-      <div class="header-top">
-        <div class="firm-brand">
-          <div class="firm-logo">T</div>
-          <div>
-            <div class="firm-name">Tikona Capital</div>
-            <div class="firm-tagline">Driven by Research, Built with Conviction</div>
-          </div>
-        </div>
-        <div class="report-type-badge">{_e(report_type)}</div>
-      </div>
-      <div class="header-company-line">
-        <span class="company-name-hdr">{_e(pack.company)}</span>
-        <span class="rating-badge">{_e(pack.rating or '')}</span>
-        <span class="sector-tag">{_e(pack.ticker or '')} &nbsp;|&nbsp; {_e(pack.sector or '')} &nbsp;|&nbsp; {_e(mcap_cat)}</span>
-      </div>
-      <div class="report-date">
-        CMP: ₹{_e(_fmt_price(pack.cmp))} &nbsp;|&nbsp;
-        TP: ₹{_e(_fmt_price(pack.target_price))} &nbsp;|&nbsp;
-        Upside: {_e(up_s)} &nbsp;|&nbsp;
-        MCap: {_e(str(mcap))}
-      </div>
-    </div>"""
-
-
-def _render_mini_header(pack: CompanyPack, page_title: str = "") -> str:
-    mcap_cat = _mcap_category(pack)
-    up = pack.upside_potential_pct
-    up_s = f"{up}%" if up else "—"
-    return f"""
-    <div class="mini-header">
-      <div class="mini-firm">Tikona Capital</div>
-      <div class="mini-company">{_e(page_title)}</div>
-      <div class="mini-meta">
-        {_e(pack.rating or '')} &nbsp;|&nbsp;
-        CMP: ₹{_e(_fmt_price(pack.cmp))} &nbsp;|&nbsp;
-        TP: ₹{_e(_fmt_price(pack.target_price))} &nbsp;|&nbsp;
-        {_e(up_s)} Upside &nbsp;|&nbsp;
-        {_e(mcap_cat)}
-      </div>
-    </div>"""
-
-
 def _render_analyst_strip(pack: CompanyPack) -> str:
     """Render coverage analysts from pack.narrative["analysts"] ONLY.
 
@@ -970,42 +878,6 @@ def _render_tagline(pack: CompanyPack) -> str:
     )
 
 
-def _market_cap_text(pack: CompanyPack) -> str:
-    nar = pack.narrative
-    return _first_present(
-        nar.get("market_cap"),
-        nar.get("market_cap_rs_cr"),
-        nar.get("mcap"),
-        "â€”",
-    ) or "â€”"
-
-
-def _render_cover_stats_bar(pack: CompanyPack) -> str:
-    up = pack.upside_potential_pct
-    up_s = f"+{up}%" if _present(up) else "â€”"
-    stats = [
-        ("CMP", _html_rupee(pack.cmp), "As of latest pack"),
-        ("Target Price", _html_rupee(pack.target_price), "SOTP-led fair value"),
-        ("Upside", _e(up_s), "vs current market price"),
-        ("Market Cap", _e(_market_cap_text(pack)), _e(_mcap_category(pack))),
-    ]
-    if _present(pack.rating):
-        stats.append(("Rating", _e(pack.rating), "Tikona view"))
-    parts = []
-    for label, value, sub in stats:
-        value_cls = "hstat-value"
-        if label == "Upside":
-            value_cls += " green-v"
-        elif label == "Market Cap":
-            value_cls += " white"
-        parts.append(
-            f'<div class="hstat"><div class="hstat-label">{label}</div>'
-            f'<div class="{value_cls}">{value}</div>'
-            f'<div class="hstat-sub">{sub}</div></div>'
-        )
-    return f'<div class="header-stats-bar">{"".join(parts)}</div>'
-
-
 def _render_full_header(pack: CompanyPack, report_type: str = "Equity Research") -> str:
     mcap_cat = _mcap_category(pack)
     return f"""
@@ -1027,35 +899,6 @@ def _render_full_header(pack: CompanyPack, report_type: str = "Equity Research")
       </div>
       {_render_cover_stats_bar(pack)}
       <div class="report-date">Institutional Equity Research</div>
-    </div>"""
-
-
-def _render_mini_header(pack: CompanyPack, page_title: str = "") -> str:
-    up = pack.upside_potential_pct
-    up_s = f"+{up}%" if _present(up) else "â€”"
-    stats = [
-        ("Rating", _e(pack.rating or "â€”"), "buy"),
-        ("CMP", _html_rupee(pack.cmp), ""),
-        ("TP", _html_rupee(pack.target_price), "accent"),
-        ("Upside", _e(up_s), "green-v"),
-        ("Cap", _e(_mcap_category(pack)), ""),
-    ]
-    stat_html = []
-    for label, value, extra_cls in stats:
-        value_cls = "mini-stat-value"
-        if extra_cls:
-            value_cls += f" {extra_cls}"
-        stat_html.append(
-            f'<div class="mini-stat"><span class="mini-stat-label">{label}</span>'
-            f'<span class="{value_cls}">{value}</span></div>'
-        )
-    return f"""
-    <div class="mini-header">
-      <div class="mini-header-left">
-        <div class="mini-firm">Tikona Capital</div>
-        <div class="mini-company">{_e(page_title)}</div>
-      </div>
-      <div class="mini-stats">{''.join(stat_html)}</div>
     </div>"""
 
 
@@ -1195,52 +1038,7 @@ def render_page(
     sidebar = _render_sidebar(pack)
 
     if is_first:
-        # ── COVER: three-col-wide (main | fin-table | sidebar) ──
         header = _render_full_header(pack, "Equity Research — Initiating Coverage")
-        tagline = _render_tagline(pack)
-        analysts = _render_analyst_strip(pack)
-
-        main_blocks = "".join(
-            render_block(b, pack, i) for i, b in enumerate(page.blocks)
-        )
-        fin_col = _render_cover_fin_table(pack)
-
-        body = f"""
-        {tagline}
-        {analysts}
-        <div class="three-col-wide" style="padding-bottom:48px;">
-          <div>{main_blocks}</div>
-          <div>{fin_col}</div>
-          <div>{sidebar}</div>
-        </div>"""
-
-    else:
-        # ── INNER: full-width ──
-        header = _render_mini_header(pack, page.title)
-        sec_hdr = "" if page.page_type == "cover" else _render_section_header(page)
-        main_blocks = "".join(
-            render_block(b, pack, i) for i, b in enumerate(page.blocks)
-        )
-
-        body = f"""
-        <div class="page-content pb48">{sec_hdr}{main_blocks}</div>"""
-
-    return f'<div class="page">{header}{body}{footer}</div>'
-
-
-# ─── Document assembly ────────────────────────────────────────────────────────
-
-def render_page(
-    page: PageContent,
-    pack: CompanyPack,
-    total_pages: int,
-    is_first: bool,
-) -> str:
-    footer = _render_footer(page, pack, total_pages)
-    sidebar = _render_sidebar(pack)
-
-    if is_first:
-        header = _render_full_header(pack, "Equity Research â€” Initiating Coverage")
         tagline = _render_tagline(pack)
         analysts = _render_analyst_strip(pack)
         main_blocks = "".join(render_block(b, pack, i) for i, b in enumerate(page.blocks))
@@ -1253,7 +1051,27 @@ def render_page(
           <div>{fin_col}</div>
           <div>{sidebar}</div>
         </div>"""
+
+    elif page.page_type == "story_charts":
+        # ── STORY_CHARTS: full-width 3×2 chart grid, no sidebar ──
+        header = _render_mini_header(pack, page.title)
+        sec_hdr = _render_section_header(page)
+        chart_blocks = [b for b in page.blocks if isinstance(b, ChartBlock)]
+        other_blocks = [b for b in page.blocks if not isinstance(b, ChartBlock)]
+        chart_cells = "".join(
+            f'<div class="story-chart-cell">{render_block(b, pack, i)}</div>'
+            for i, b in enumerate(chart_blocks)
+        )
+        other_html = "".join(render_block(b, pack, i) for i, b in enumerate(other_blocks))
+        body = f"""
+        <div class="page-content pb48" style="padding:10px 18px 0;">
+          {sec_hdr}
+          {other_html}
+          <div class="chart-grid-3">{chart_cells}</div>
+        </div>"""
+
     else:
+        # ── INNER: two-col-side (main content + persistent sidebar) ──
         header = _render_mini_header(pack, page.title)
         sec_hdr = "" if page.page_type == "cover" else _render_section_header(page)
         main_blocks = "".join(render_block(b, pack, i) for i, b in enumerate(page.blocks))
@@ -1269,6 +1087,9 @@ def render_page(
         </div>"""
 
     return f'<div class="page">{header}{body}{footer}</div>'
+
+
+# ─── Document assembly ────────────────────────────────────────────────────────
 
 
 _DISCLAIMER_TEXT = (
@@ -1306,81 +1127,10 @@ _DISCLAIMER_TEXT = (
 )
 
 
-def _render_disclaimer_page(pack: CompanyPack, header: str, footer: str, page_number: int) -> str:
-    """Full branded closing page: recap + rating distribution + coverage + SEBI text."""
-    up = pack.upside_potential_pct
-    up_s = f"+{up}%" if up else "—"
-    recap = f"""
-    <div class="highlight-box accent-border" style="margin-bottom:6px;">
-      <div class="highlight-box-title" style="font-size:8pt;">Recommendation Recap — {_e(pack.company)}</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px;">
-        <div><div class="side-metric-title dark">Rating</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:10pt;font-weight:700;color:var(--primary-dark);">{_e(pack.rating or '—')}</div></div>
-        <div><div class="side-metric-title dark">CMP</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:10pt;font-weight:700;color:var(--primary-dark);">₹{_e(_fmt_price(pack.cmp))}</div></div>
-        <div><div class="side-metric-title dark">Target Price</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:10pt;font-weight:700;color:var(--accent);">₹{_e(_fmt_price(pack.target_price))}</div></div>
-        <div><div class="side-metric-title dark">Upside</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:10pt;font-weight:700;color:var(--green);">{_e(up_s)}</div></div>
-      </div>
-    </div>"""
-
-    rating_dist = """
-    <div class="fin-table-wrap">
-      <div class="fin-table-title">Distribution of Ratings (Coverage Universe)</div>
-      <table>
-        <thead><tr><th style="text-align:left;">Rating</th><th>Count</th><th>% of Coverage</th><th>IB Services (12m)</th></tr></thead>
-        <tbody>
-          <tr><td>BUY</td><td>—</td><td>—</td><td>0</td></tr>
-          <tr><td>HOLD</td><td>—</td><td>—</td><td>0</td></tr>
-          <tr><td>SELL</td><td>—</td><td>—</td><td>0</td></tr>
-          <tr class="tbl-highlight"><td class="bold">Total</td><td>—</td><td>100%</td><td>0</td></tr>
-        </tbody>
-      </table>
-      <div class="figure-source">As required under SEBI (Research Analysts) Regulations, 2014.</div>
-    </div>"""
-
-    price_hist = """
-    <div class="fin-table-wrap">
-      <div class="fin-table-title">3-Year Price & Rating History</div>
-      <table>
-        <thead><tr><th style="text-align:left;">Date</th><th>Rating</th><th>TP (₹)</th><th>CMP at Call (₹)</th></tr></thead>
-        <tbody>
-          <tr><td>Initiation</td><td class="accent">""" + _e(pack.rating or '—') + """</td><td>""" + _e(_fmt_price(pack.target_price)) + """</td><td>""" + _e(_fmt_price(pack.cmp)) + """</td></tr>
-        </tbody>
-      </table>
-      <div class="figure-source">Prior coverage: none — initiation report.</div>
-    </div>"""
-
-    contact = """
-    <div class="side-panel-card" style="margin-top:6px;">
-      <div class="side-section-hdr">Tikona Capital — Research Desk</div>
-      <div class="side-row"><span class="side-label">SEBI Reg.</span><span class="side-value">INH000009807</span></div>
-      <div class="side-row"><span class="side-label">Email</span><span class="side-value">research@tikonacapital.in</span></div>
-      <div class="side-row"><span class="side-label">Web</span><span class="side-value">tikonacapital.in</span></div>
-    </div>"""
-
-    body = f"""
-    <div class="page-content pb48">
-      <div class="section-header">
-        <span class="section-number">{page_number:02d}</span>
-        <span class="section-title">Disclaimer &amp; Disclosures</span>
-      </div>
-      {recap}
-      <div class="two-col" style="gap:10px;">
-        <div>{rating_dist}{price_hist}</div>
-        <div>
-          <div class="disclaimer" style="font-size:5pt;line-height:1.5;margin-top:0;">{_DISCLAIMER_TEXT}</div>
-          {contact}
-        </div>
-      </div>
-    </div>"""
-    return f'<div class="page">{header}{body}{footer}</div>'
-
 
 def _render_disclaimer_page(pack: CompanyPack, header: str, footer: str, page_number: int) -> str:
     up = pack.upside_potential_pct
-    up_s = f"+{up}%" if _present(up) else "â€”"
+    up_s = f"+{up}%" if _present(up) else "—"
     analysts = pack.narrative.get("analysts") or []
     analyst_html = "".join(
         f'<div class="side-row"><span class="side-label dark">{_e(a.get("name", ""))}</span>'
@@ -1395,9 +1145,9 @@ def _render_disclaimer_page(pack: CompanyPack, header: str, footer: str, page_nu
         <span class="section-title">Disclaimer &amp; Disclosures</span>
       </div>
       <div class="highlight-box accent-border" style="margin-bottom:6px;">
-        <div class="highlight-box-title" style="font-size:8pt;">Recommendation Recap â€” {_e(pack.company)}</div>
+        <div class="highlight-box-title" style="font-size:8pt;">Recommendation Recap â€" {_e(pack.company)}</div>
         <div class="metric-strip" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px;">
-          <div class="metric-card light-bg"><div class="metric-card-label">Rating</div><div class="metric-card-value">{_e(pack.rating or 'â€”')}</div></div>
+          <div class="metric-card light-bg"><div class="metric-card-label">Rating</div><div class="metric-card-value">{_e(pack.rating or 'â€"')}</div></div>
           <div class="metric-card"><div class="metric-card-label">CMP</div><div class="metric-card-value">{_html_rupee(pack.cmp)}</div></div>
           <div class="metric-card accent-bg"><div class="metric-card-label">Target Price</div><div class="metric-card-value">{_html_rupee(pack.target_price)}</div></div>
           <div class="metric-card teal-bg"><div class="metric-card-label">Upside</div><div class="metric-card-value">{_e(up_s)}</div></div>
@@ -1435,7 +1185,7 @@ def _render_disclaimer_page(pack: CompanyPack, header: str, footer: str, page_nu
 def render_document(
     pages: list[PageContent],
     pack: CompanyPack,
-    css: str | None = None,      # ignored — kept for backward compat
+    _css: str | None = None,     # ignored — kept for backward compat
     title: str | None = None,
 ) -> str:
     brand_css = load_brand_css()

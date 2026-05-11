@@ -16,15 +16,15 @@ const N8N_BASE_URL = 'https://n8n.tikonacapital.com';
 const FINANCIAL_MODEL_SERVICE_URL = '/proxy/fm';
 
 /**
- * Triggers the financial model generation script via n8n webhook.
- * The webhook runs the Python financial model script server-side and uploads
- * the resulting Excel file to the given Google Drive folder.
+ * Triggers the financial model generation service directly (bypasses n8n).
+ * The Python service generates the Excel, uploads it to Supabase Storage,
+ * and returns a stable URL for downstream report generation.
  *
  * @param ticker - NSE stock symbol (e.g., "TATAMOTORS")
  * @param companyName - Full company name (e.g., "Tata Motors Ltd")
  * @param sector - Company sector (e.g., "Automobile")
- * @param folderId - Google Drive folder ID to upload the model into
- * @returns Promise with the drive file ID of the generated model (or null if unavailable)
+ * @param folderId - Google Drive folder ID retained for compatibility with older callers
+ * @returns Promise with the generated model URL and metadata
  */
 export async function generateFinancialModel(
   ticker: string,
@@ -47,7 +47,7 @@ export async function generateFinancialModel(
 
   console.log('[API] Generating financial model with:', requestBody);
 
-  const response = await fetch(`${N8N_BASE_URL}/webhook/generate-financial-model`, {
+  const response = await fetch(`${FINANCIAL_MODEL_SERVICE_URL}/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(requestBody),
@@ -63,17 +63,19 @@ export async function generateFinancialModel(
 
   const responseText = await response.text();
   if (!responseText) {
-    // Webhook may be fire-and-forget — return gracefully
-    console.warn('[API] Financial model webhook returned empty response (may be async)');
-    return { fileId: null, fileUrl: null, fileName, storageUrl: null, driveFileUrl: null };
+    throw new Error('Financial model service returned an empty response');
   }
 
   let data: Record<string, unknown>;
   try {
     data = JSON.parse(responseText);
   } catch {
-    console.warn('[API] Financial model response not JSON:', responseText.slice(0, 200));
-    return { fileId: null, fileUrl: null, fileName, storageUrl: null, driveFileUrl: null };
+    console.error('[API] Financial model response not JSON:', responseText.slice(0, 200));
+    throw new Error('Financial model service returned invalid JSON');
+  }
+
+  if (data.status === 'error') {
+    throw new Error((data.message as string) || 'Financial model generation failed');
   }
 
   const fileId = (data.file_id as string) || (data.id as string) || null;
@@ -1041,6 +1043,46 @@ export interface GeneratePptxResult {
   pptx_pdf_file_path?: string | null;
   duration_seconds?: number | null;
   warnings?: string[] | null;
+}
+
+export interface PptPlaceholdersResult {
+  status: string;
+  placeholders: Record<string, string>;
+  has_saved_overrides: boolean;
+  warnings: string[];
+}
+
+export async function fetchPptPlaceholders(
+  reportId: string,
+  sessionId: string,
+): Promise<PptPlaceholdersResult> {
+  const response = await fetch(`${PPT_SERVICE_URL}/preview-placeholders`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reportId, sessionId }),
+  });
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(`Failed to fetch PPT placeholders: ${response.status} ${err.slice(0, 200)}`);
+  }
+  return (await response.json()) as PptPlaceholdersResult;
+}
+
+export async function savePptPlaceholders(
+  reportId: string,
+  data: Record<string, string>,
+): Promise<void> {
+  // Ensure cs_ppt_data column exists (idempotent — Postgres IF NOT EXISTS)
+  try {
+    await supabase.rpc('add_report_section_column', { col_name: 'ppt_data' });
+  } catch {
+    // Column already exists — safe to ignore
+  }
+  const { error } = await supabase
+    .from('research_reports')
+    .update({ cs_ppt_data: JSON.stringify(data), updated_at: new Date().toISOString() })
+    .eq('report_id', reportId);
+  if (error) throw new Error(`Failed to save PPT data: ${error.message}`);
 }
 
 export async function generatePptx(

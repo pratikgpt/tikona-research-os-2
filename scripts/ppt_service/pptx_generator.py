@@ -15,25 +15,16 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import reportgen
-from reportgen.config import settings
-from reportgen.ai.openrouter_client import OpenRouterPlanningClient
-from reportgen.orchestration.pipeline import run_local_pipeline
-import reportgen.orchestration.pipeline as reportgen_pipeline
-from reportgen.schemas.planning import (
-    PlanningBulletBlock,
-    PlanningChartBlock,
-    PlanningMetricItem,
-    PlanningMetricsBlock,
-    PlanningTableBlock,
-    PlanningTableColumn,
-    PlanningTextBlock,
-    SlidePlan,
-    SlidePlanSlide,
-)
-
 from supabase_client import get_service_client
+from typing import Any
 
+from pptx import Presentation
+from pptx.chart.data import CategoryChartData
+from pptx.enum.chart import XL_CHART_TYPE
+
+from chart_generators import generate_chart
+
+import logging
 logger = logging.getLogger(__name__)
 
 PPTX_BUCKET = "research-reports-pptx"
@@ -99,10 +90,15 @@ def _prefer(*vals: Any) -> str:
 
 
 def _clean_prose(text: str, *, max_len: int = 500) -> str:
-    """Keep planner prose validator-safe while preserving the analyst's point."""
-    cleaned = _ORPHAN_NUMBER_RE.sub("the relevant figure", text or "")
-    cleaned = re.sub(r"\s+", " ", cleaned).strip()
-    return cleaned[:max_len].strip()
+    cleaned = re.sub(r"\s+", " ", text or "").strip()
+    if len(cleaned) <= max_len:
+        return cleaned
+    # Truncate at word boundary so we don't cut mid-word
+    truncated = cleaned[:max_len]
+    last_space = truncated.rfind(" ")
+    if last_space > int(max_len * 0.75):
+        return truncated[:last_space].strip()
+    return truncated.strip()
 
 
 def _section_by_any(sections: list[dict], keywords: list[str]) -> str:
@@ -116,10 +112,31 @@ def _section_by_any(sections: list[dict], keywords: list[str]) -> str:
 
 
 def _bullets_from_text(text: str, *, limit: int = 5, max_len: int = 180) -> list[str]:
-    parts = re.split(r"(?:\n+|(?<=[.!?])\s+)", text or "")
-    bullets: list[str] = []
+    if not text:
+        return ["Analyst narrative supports continued monitoring of the core investment case."]
+
+    # Try splitting on **Bold header:** sections first — common in research reports
+    bold_headers = re.findall(r'\*\*([^*]+?):\*\*', text)
+    bold_parts   = re.split(r'\*\*[^*]+?:\*\*', text)
+    if len(bold_headers) >= 2 and len(bold_parts) >= 2:
+        bullets: list[str] = []
+        for header, content in zip(bold_headers, bold_parts[1:]):
+            # First sentence of content after the header
+            first_sent = re.split(r'(?<=[.!?])\s+', content.strip())[0] if content.strip() else ""
+            combined = f"{header}: {first_sent.strip()}" if first_sent.strip() else header
+            item = _clean_prose(combined.lstrip("-*•: "), max_len=max_len)
+            if len(item) >= 12:
+                bullets.append(item)
+            if len(bullets) >= limit:
+                break
+        if len(bullets) >= 2:
+            return bullets
+
+    # Fall back: split on newlines and sentence endings
+    parts = re.split(r"(?:\n+|(?<=[.!?])\s+)", text)
+    bullets = []
     for part in parts:
-        item = _clean_prose(part.lstrip("-*• ").strip(), max_len=max_len)
+        item = _clean_prose(part.lstrip("-*•** ").strip(), max_len=max_len)
         if len(item) >= 12:
             bullets.append(item)
         if len(bullets) >= limit:
@@ -162,359 +179,6 @@ def _extract_rating(text: str) -> str:
 
 def _strip_qmark(url: str) -> str:
     return url.rstrip("?") if url else url
-
-
-def _find_reportgen_root() -> Path:
-    package_path = Path(reportgen.__file__).resolve()
-    for parent in package_path.parents:
-        if (parent / "prompts" / "user" / "slide_planner_input.md").exists():
-            return parent
-    raise RuntimeError(f"Could not find reportgen prompts root from {package_path}")
-
-
-@contextmanager
-def _reportgen_cwd():
-    previous = Path.cwd()
-    os.chdir(_find_reportgen_root())
-    try:
-        yield
-    finally:
-        os.chdir(previous)
-
-
-def _patch_openrouter_client() -> None:
-    """Avoid openai/httpx version skew by using OpenRouter's HTTP API directly."""
-    global _OPENROUTER_PATCHED
-    if _OPENROUTER_PATCHED:
-        return
-
-    def generate(self, system_prompt: str, user_prompt: str) -> str:
-        if not self.api_key:
-            raise RuntimeError("OpenRouter API key is not configured.")
-
-        url = "https://openrouter.ai/api/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "HTTP-Referer": "https://github.com/pptx-research-report",
-            "X-Title": "PPTX Research Report Generator",
-            "Content-Type": "application/json",
-        }
-        data = {
-            "model": self.model_name,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            "max_tokens": settings.planning_max_tokens,
-            "temperature": settings.planning_temperature,
-        }
-
-        req = urllib.request.Request(url, json.dumps(data).encode("utf-8"), headers)
-        try:
-            with urllib.request.urlopen(req, timeout=180) as response:
-                result = json.loads(response.read().decode("utf-8"))
-                return result["choices"][0]["message"]["content"]
-        except urllib.error.HTTPError as exc:
-            error_body = exc.read().decode("utf-8")
-            raise RuntimeError(f"OpenRouter API error: {exc.code} - {error_body}") from exc
-
-    OpenRouterPlanningClient.generate = generate
-    _OPENROUTER_PATCHED = True
-
-
-def _install_house_planner_patch() -> None:
-    """Force generation through the same 15-slide house format.
-
-    This intentionally bypasses the live planner. Claude/OpenRouter was choosing
-    fewer slides and sparse blocks when source refs were thin; the renderer can
-    build the requested format deterministically once inputs are normalized.
-    """
-    global _HOUSE_PLANNER_PATCHED
-    if _HOUSE_PLANNER_PATCHED:
-        return
-
-    def _section_text(bundle, keywords: list[str], fallback_index: int = 0) -> str:
-        for section in bundle.report_sections:
-            haystack = section.heading.casefold()
-            if any(k in haystack for k in keywords):
-                return section.body
-        if bundle.report_sections:
-            if fallback_index < 0:
-                index = max(len(bundle.report_sections) + fallback_index, 0)
-            else:
-                index = min(fallback_index, len(bundle.report_sections) - 1)
-            return bundle.report_sections[index].body
-        return "Approved research narrative supports this section."
-
-    def _lines(text: str, limit: int = 5) -> list[str]:
-        return _bullets_from_text(text, limit=limit, max_len=175)
-
-    def _series_key(bundle) -> str:
-        return (bundle.data_references.series_source_keys or ["series.Revenue"])[0]
-
-    def _ratio_columns(bundle) -> list[PlanningTableColumn]:
-        periods = bundle.data_references.period_labels or ["FY24A", "FY25A", "FY26E"]
-        return [
-            PlanningTableColumn(key="ratio", label="Metric"),
-            *[PlanningTableColumn(key=p, label=p) for p in periods],
-        ]
-
-    def house_plan_slides(bundle, *, use_mock: bool = False) -> SlidePlan:
-        series_key = _series_key(bundle)
-        thesis = _section_text(bundle, ["investment", "thesis", "summary"], 0)
-        industry = _section_text(bundle, ["industry", "sector", "market"], 1)
-        company = _section_text(bundle, ["company", "business", "overview"], 2)
-        idea = _section_text(bundle, ["idea", "model", "demand", "driver", "competitive", "catalyst"], 3)
-        mgmt = _section_text(bundle, ["management", "forensic", "governance"], 4)
-        forecast = _section_text(bundle, ["earning", "forecast", "financial"], 5)
-        valuation = _section_text(bundle, ["valuation", "target"], 6)
-        risk = _section_text(bundle, ["risk", "invalidation"], -2)
-        strategy = _section_text(bundle, ["trading", "strategy", "entry", "exit"], -1)
-
-        from reportgen.compliance import load_disclaimer_text
-
-        slides = [
-            SlidePlanSlide(
-                slide_id="s1",
-                layout="cover_slide",
-                title="Teaser Page",
-                subtitle=_clean_prose(thesis, max_len=115),
-                blocks=[
-                    PlanningMetricsBlock(
-                        key="headline_metrics",
-                        items=[
-                            PlanningMetricItem(label="Rating", source_key="metadata.rating"),
-                            PlanningMetricItem(label="CMP", source_key="metadata.cmp"),
-                            PlanningMetricItem(label="Target Price", source_key="metadata.target_price"),
-                            PlanningMetricItem(label="Upside", source_key="metadata.upside_pct"),
-                            PlanningMetricItem(label="Market Cap", source_key="metadata.market_cap"),
-                        ],
-                    ),
-                    PlanningTextBlock(key="thesis_summary", content=_clean_prose(thesis, max_len=700)),
-                    PlanningBulletBlock(key="highlights", items=_lines(thesis, 4)),
-                ],
-            ),
-            SlidePlanSlide(
-                slide_id="s2",
-                layout="text_plus_chart",
-                title="Story in Charts",
-                blocks=[
-                    PlanningTextBlock(
-                        key="trend_summary",
-                        content=_clean_prose(
-                            "The operating story is anchored in the approved model trend and the analyst narrative on what is changing in the business.",
-                            max_len=260,
-                        ),
-                    ),
-                    PlanningChartBlock(
-                        key="trend_chart",
-                        chart_type="bar",
-                        title="Operating Trend",
-                        category_source="period_labels",
-                        series_source_keys=[series_key],
-                    ),
-                ],
-            ),
-            SlidePlanSlide(
-                slide_id="s3",
-                layout="investment_thesis",
-                title="Investment Thesis",
-                blocks=[
-                    PlanningTextBlock(key="summary", content=_clean_prose(thesis, max_len=780)),
-                    PlanningBulletBlock(key="key_points", items=_lines(thesis, 6)),
-                ],
-            ),
-            SlidePlanSlide(
-                slide_id="s4",
-                layout="industry_overview",
-                title="Industry Overview",
-                blocks=[
-                    PlanningTextBlock(key="industry_text", content=_clean_prose(industry, max_len=760)),
-                    PlanningBulletBlock(key="industry_points", items=_lines(industry, 5)),
-                ],
-            ),
-            SlidePlanSlide(
-                slide_id="s5",
-                layout="company_snapshot",
-                title="Company Overview",
-                blocks=[
-                    PlanningTextBlock(key="business_summary", content=_clean_prose(company, max_len=760)),
-                    PlanningMetricsBlock(
-                        key="snapshot_metrics",
-                        items=[
-                            PlanningMetricItem(label="Rating", source_key="metadata.rating"),
-                            PlanningMetricItem(label="CMP", source_key="metadata.cmp"),
-                            PlanningMetricItem(label="Target Price", source_key="metadata.target_price"),
-                            PlanningMetricItem(label="Upside", source_key="metadata.upside_pct"),
-                        ],
-                    ),
-                ],
-            ),
-            SlidePlanSlide(
-                slide_id="s6",
-                layout="key_highlights",
-                title="Key Investment Idea / Business Model / Demand Drivers / Competitive Landscape",
-                blocks=[
-                    PlanningTextBlock(key="highlights_intro", content=_clean_prose(idea, max_len=320)),
-                    PlanningBulletBlock(key="highlights_items", items=_lines(idea, 6)),
-                ],
-            ),
-            SlidePlanSlide(
-                slide_id="s7",
-                layout="forensic_assessment",
-                title="Management / Forensic",
-                blocks=[
-                    PlanningTextBlock(key="forensic_intro", content=_clean_prose(mgmt, max_len=380)),
-                    PlanningTableBlock(
-                        key="forensic_table",
-                        title="Governance Review",
-                        source_key="forensic_violations",
-                        columns=[
-                            PlanningTableColumn(key="title", label="Parameter"),
-                            PlanningTableColumn(key="description", label="Assessment"),
-                            PlanningTableColumn(key="severity", label="Severity"),
-                        ],
-                    ),
-                ],
-            ),
-            SlidePlanSlide(
-                slide_id="s8",
-                layout="full_table",
-                title="Earnings Forecast",
-                blocks=[
-                    PlanningTableBlock(
-                        key="financial_table",
-                        title="Earnings Forecast",
-                        source_key=series_key,
-                        columns=[
-                            PlanningTableColumn(key="period", label="Period"),
-                            PlanningTableColumn(key="value", label="Value"),
-                        ],
-                    )
-                ],
-            ),
-            SlidePlanSlide(
-                slide_id="s9",
-                layout="ratio_summary",
-                title="Quarterly Performance / Key Ratios",
-                blocks=[
-                    PlanningTextBlock(key="ratio_text", content=_clean_prose(forecast, max_len=260)),
-                    PlanningTableBlock(
-                        key="ratio_table",
-                        title="Key Ratios",
-                        source_key="ratio_summary",
-                        columns=_ratio_columns(bundle),
-                    ),
-                ],
-            ),
-            SlidePlanSlide(
-                slide_id="s10",
-                layout="valuation_table",
-                title="Valuations",
-                blocks=[
-                    PlanningTextBlock(key="valuation_text", content=_clean_prose(valuation, max_len=260)),
-                    PlanningTableBlock(
-                        key="valuation_methods_table",
-                        title="Valuation Bands",
-                        source_key="valuation_bands",
-                        columns=[
-                            PlanningTableColumn(key="method", label="Method"),
-                            PlanningTableColumn(key="low", label="Low"),
-                            PlanningTableColumn(key="base", label="Base"),
-                            PlanningTableColumn(key="high", label="High"),
-                            PlanningTableColumn(key="weight", label="Weight"),
-                            PlanningTableColumn(key="notes", label="Notes"),
-                        ],
-                    ),
-                    PlanningMetricsBlock(
-                        key="valuation_metrics",
-                        items=[
-                            PlanningMetricItem(label="Target Price", source_key="metadata.target_price"),
-                            PlanningMetricItem(label="Upside", source_key="metadata.upside_pct"),
-                        ],
-                    ),
-                ],
-            ),
-            SlidePlanSlide(
-                slide_id="s11",
-                layout="saarthi_scorecard",
-                title="SAARTHI Scorecard",
-                blocks=[
-                    PlanningTextBlock(key="saarthi_intro", content="Tikona's proprietary quality framework summarizes scalability, market opportunity, pricing power, reinvestment, track record, governance, and inflection potential."),
-                    PlanningTableBlock(
-                        key="saarthi_table",
-                        title="SAARTHI Dimensions",
-                        source_key="saarthi_dimensions",
-                        columns=[
-                            PlanningTableColumn(key="code", label="Code"),
-                            PlanningTableColumn(key="name", label="Dimension"),
-                            PlanningTableColumn(key="score", label="Score"),
-                            PlanningTableColumn(key="evidence", label="Evidence"),
-                        ],
-                    ),
-                ],
-            ),
-            SlidePlanSlide(
-                slide_id="s12",
-                layout="scenario_analysis",
-                title="Scenario Analysis",
-                blocks=[
-                    PlanningTextBlock(key="scenario_text", content=_clean_prose(valuation, max_len=220)),
-                    PlanningTableBlock(
-                        key="scenario_table",
-                        title="Bull / Base / Bear",
-                        source_key="scenarios",
-                        columns=[
-                            PlanningTableColumn(key="name", label="Case"),
-                            PlanningTableColumn(key="target_price", label="Target"),
-                            PlanningTableColumn(key="probability", label="Probability"),
-                            PlanningTableColumn(key="notes", label="Drivers"),
-                        ],
-                    ),
-                ],
-            ),
-            SlidePlanSlide(
-                slide_id="s13",
-                layout="risks_and_catalysts",
-                title="Risks & Catalysts",
-                blocks=[
-                    PlanningBulletBlock(key="risk_points", items=_lines(risk, 6)),
-                ],
-            ),
-            SlidePlanSlide(
-                slide_id="s14",
-                layout="trading_strategy",
-                title="Trading Strategy",
-                blocks=[
-                    PlanningMetricsBlock(
-                        key="strategy_metrics",
-                        items=[
-                            PlanningMetricItem(label="CMP", source_key="metadata.cmp"),
-                            PlanningMetricItem(label="Target Price", source_key="metadata.target_price"),
-                            PlanningMetricItem(label="Upside", source_key="metadata.upside_pct"),
-                        ],
-                    ),
-                    PlanningTextBlock(key="strategy_text", content=_clean_prose(strategy, max_len=420)),
-                    PlanningBulletBlock(key="strategy_review", items=_lines(strategy, 5)),
-                ],
-            ),
-            SlidePlanSlide(
-                slide_id="s15",
-                layout="disclaimer",
-                title="Disclaimer",
-                blocks=[PlanningTextBlock(key="disclaimer_text", content=load_disclaimer_text())],
-            ),
-        ]
-
-        plan = SlidePlan(
-            company_ticker=bundle.normalized_ticker,
-            generated_at=datetime.now(timezone.utc),
-            slides=slides,
-        )
-        return plan
-
-    reportgen_pipeline.plan_slides = house_plan_slides
-    _HOUSE_PLANNER_PATCHED = True
 
 
 # ─────────── input builders ───────────────────────────────────────────────────
@@ -672,9 +336,30 @@ def _build_financial_model(ticker: str, model_json: dict | None, warnings: list[
     series: list[dict] = []
     metrics: dict[str, str] = {}
 
+    # ── Absolute P&L series (Revenue, EBITDA, PAT in ₹ Cr) ──────────────────
+    # financial_model_v5._embed_pl_series() stores historical + projected
+    # absolute values so charts show real numbers rather than placeholders.
+    hist_pl = model_json.get("historical_pl") or {}
+    proj_pl = model_json.get("projected_pl") or {}
+    h_yrs   = [str(y) for y in (hist_pl.get("years") or [])]
+    p_yrs   = [str(y) for y in (proj_pl.get("years") or [])]
+    combined_pl_years = h_yrs + p_yrs
+
+    if combined_pl_years:
+        for label, h_key, p_key in [
+            ("Revenue", "revenue", "revenue"),
+            ("EBITDA",  "ebitda",  "ebitda"),
+            ("PAT",     "pat",     "pat"),
+        ]:
+            vals = list(hist_pl.get(h_key) or []) + list(proj_pl.get(p_key) or [])
+            if any(v is not None for v in vals):
+                s = _series(label, "INR Cr", combined_pl_years, vals)
+                if s:
+                    series.append(s)
+
     if all_years:
         rev_growth = asmp.get("revenue_growth_pct") or {}
-        # Build revenue growth series aligned to unified timeline (None for hist years)
+        # Revenue growth % series (used as fallback when absolute values absent)
         rev_vals = [rev_growth.get(y) for y in all_years]
         if any(v is not None for v in rev_vals):
             s = _series("Revenue Growth", "%", all_years, rev_vals)
@@ -1022,6 +707,523 @@ def _upload(client, local: Path, key: str, content_type: str) -> tuple[str, str]
 
 # ─────────── orchestrator ─────────────────────────────────────────────────────
 
+def _classify_market_cap(market_cap_raw: str) -> str:
+    mcap = _parse_number(market_cap_raw)
+    if mcap is None or mcap <= 0:
+        return "Large Cap"
+    if mcap >= 20000:
+        return "Large Cap"
+    if mcap >= 5000:
+        return "Mid Cap"
+    return "Small Cap"
+
+
+def _fmt_mcap(market_cap_raw: str) -> str:
+    mcap = _parse_number(market_cap_raw)
+    if mcap is None or mcap <= 0:
+        return market_cap_raw or ""
+    return f"₹{mcap:,.0f} Cr"
+
+
+def _synthesise_saarthi_assessment(saarthi: dict) -> str:
+    """Derive a short overall_assessment from dimension evidence when the field is absent."""
+    dims = saarthi.get("dimensions") or []
+    # Try to pick the first dimension that has real evidence text
+    for d in dims:
+        evidence = (d.get("key_evidence") or d.get("assessment") or "").strip()
+        if evidence and len(evidence) > 20 and "Derived from" not in evidence:
+            return evidence
+    # Fall back to assembling from all dimension assessments
+    snippets = []
+    for d in dims:
+        a = (d.get("assessment") or "").strip()
+        if a and len(a) > 10:
+            snippets.append(a)
+    if snippets:
+        return _clean_prose(" ".join(snippets), max_len=600)
+    return "Quality score driven by strong scalability and resilient track record."
+
+
+def map_replacements(company, metadata, fin_model, sections):
+    thesis   = _section_by_any(sections, ["investment", "thesis", "summary"])
+    industry = _section_by_any(sections, ["industry", "sector", "market"])
+    idea     = _section_by_any(sections, ["idea", "model", "demand", "driver"])
+    catalyst = _section_by_any(sections, ["catalyst", "driver"])
+    competitive = _section_by_any(sections, ["competitive", "moat", "advantage"])
+    mgmt     = _section_by_any(sections, ["management", "forensic", "governance"])
+    # Broaden peer search: catch all common DB naming conventions
+    peer     = _section_by_any(sections, [
+        "peer", "competition", "comparable",
+        "competitive_analysis", "competitive_landscape",
+        "sector_analysis", "industry_analysis",
+    ])
+    saarthi  = fin_model.get("saarthi") or {}
+
+    thesis_bullets = _bullets_from_text(thesis, limit=4)
+
+    # 6 idea bullets: combine idea + catalyst + competitive + key_highlights
+    idea_combined = idea or catalyst or competitive or _all_sections_text(sections)
+    idea_bullets  = _bullets_from_text(idea_combined, limit=6)
+    # pad from key_highlights if we have fewer than 6
+    highlights = fin_model.get("key_highlights") or []
+    if isinstance(highlights, list) and len(idea_bullets) < 6:
+        for h in highlights:
+            body = h.get("body", h) if isinstance(h, dict) else str(h)
+            bullet = _clean_prose(str(body), max_len=180)
+            if bullet and bullet not in idea_bullets:
+                idea_bullets.append(bullet)
+            if len(idea_bullets) >= 6:
+                break
+
+    # Competitive advantage bullets — strip leading JSON/markdown artefacts
+    comp_raw = fin_model.get("competitive_advantages") or []
+    if isinstance(comp_raw, list) and comp_raw:
+        comp_bullets = [
+            _clean_prose(re.sub(r'^[\s{"\' *\-•]+', '', str(c)), max_len=280)
+            for c in comp_raw[:4]
+        ]
+    else:
+        comp_text   = competitive or idea or _all_sections_text(sections)
+        comp_bullets = _bullets_from_text(comp_text, limit=4)
+
+    # Synthesise saarthi overall_assessment once (used by both summary + content fields)
+    saarthi_assessment = (
+        saarthi.get("overall_assessment")
+        or _synthesise_saarthi_assessment(saarthi)
+    )
+
+    # Peer text — broadened fallback so valuation/sector sections are used when
+    # no section is explicitly labelled "peer" or "competition".
+    peer_text = peer or _section_by_any(sections, [
+        "valuation", "peers", "sector", "industry", "market",
+    ])
+    peer_sents = _bullets_from_text(peer_text, limit=4, max_len=220) if peer_text else []
+
+    # Market cap helpers
+    mcap_raw   = metadata.get("market_cap", "")
+    m_category = _classify_market_cap(mcap_raw)
+    m_cap_disp = _fmt_mcap(mcap_raw)
+
+    # Upside display
+    upside_raw = str(metadata.get("upside_pct", "") or "")
+    upside_disp = (upside_raw + "%") if upside_raw and not upside_raw.endswith("%") else upside_raw
+
+    today_str = date.today().strftime("%d %b %Y")
+
+    replacements = {
+        # ── Slide 1: Cover ────────────────────────────────────────────────────
+        "company_name": company.get("name", "Company"),
+        "nse_code":     company.get("ticker", ""),
+        "cmp":          metadata.get("cmp", ""),
+        "target":       metadata.get("target_price", ""),
+        "m_cap":        m_cap_disp,
+        "m_category":   m_category,
+        "saarthi_s":    str(saarthi.get("total_score", "70")),
+        "tagline":      "Initiation Report",
+        # ── Slides 1, 4: Investment Thesis ────────────────────────────────────
+        "investment_thesis_heading": "Investment Thesis",
+        "investment_thesis":         _clean_prose(thesis, max_len=1200),
+        "saarthi_summary_heading":   "SAARTHI Overview",
+        "saarthi_summary":           _clean_prose(saarthi_assessment, max_len=300),
+        "1": thesis_bullets[0] if len(thesis_bullets) > 0 else "",
+        "2": thesis_bullets[1] if len(thesis_bullets) > 1 else "",
+        "3": thesis_bullets[2] if len(thesis_bullets) > 2 else "",
+        "4": thesis_bullets[3] if len(thesis_bullets) > 3 else "",
+        # ── Slide 5: Industry Analysis ────────────────────────────────────────
+        "date":     today_str,
+        " date ":   today_str,
+        "cell":     metadata.get("cmp", ""),
+        "cell_cap": m_category,
+        "mod_cap":  m_cap_disp,
+        "mod":      metadata.get("upside_pct", ""),
+        "tar_pr":   metadata.get("target_price", ""),
+        "tar":      metadata.get("target_price", ""),  # Slide 5 uses {{tar}}
+        "buy":      metadata.get("cmp", ""),
+        "up":       upside_disp,
+        "industry_structure": _clean_prose(industry, max_len=600),
+        "key_industry":       _clean_prose("\n\n".join(fin_model.get("industry_tailwinds") or []), max_len=600),
+        "key_industry_risk":  _clean_prose("\n\n".join(fin_model.get("industry_risks") or []), max_len=600),
+        # ── Slide 6: Company Overview ─────────────────────────────────────────
+        "COMPANY_OVERVIEW": _clean_prose(company.get("description", ""), max_len=1500),
+        # ── Slide 7: Business Ideas ───────────────────────────────────────────
+        "p1": idea_bullets[0] if len(idea_bullets) > 0 else "",
+        "p2": idea_bullets[1] if len(idea_bullets) > 1 else "",
+        "p3": idea_bullets[2] if len(idea_bullets) > 2 else "",
+        "p4": idea_bullets[3] if len(idea_bullets) > 3 else "",
+        "p5": idea_bullets[4] if len(idea_bullets) > 4 else "",
+        "p6": idea_bullets[5] if len(idea_bullets) > 5 else "",
+        # ── Slide 8: Competitive Advantages ──────────────────────────────────
+        "competitve_advantage_1": comp_bullets[0] if len(comp_bullets) > 0 else "",
+        "competitve_advantage_2": comp_bullets[1] if len(comp_bullets) > 1 else "",
+        "competitve_advantage_3": comp_bullets[2] if len(comp_bullets) > 2 else "",
+        "competitve_advantage_4": comp_bullets[3] if len(comp_bullets) > 3 else "",
+        "industry_tailwinds":     _clean_prose(industry, max_len=400),
+        # ── Slide 9: Peer Comparison ──────────────────────────────────────────
+        "peer_comparision": _clean_prose(peer_text, max_len=600),
+        "peer_para1": _clean_prose(
+            peer_sents[0] if peer_sents else (peer_text[:280] if peer_text else ""), max_len=300),
+        "peer_para2": _clean_prose(
+            peer_sents[1] if len(peer_sents) > 1 else (peer_text[280:560] if peer_text and len(peer_text) > 280 else ""),
+            max_len=300,
+        ),
+        # ── Slide 10: Management ──────────────────────────────────────────────
+        "management_commentry_heading": "Management Analysis",
+        "management_content":           _clean_prose(mgmt, max_len=1500),
+        # ── Slide 11: Governance ──────────────────────────────────────────────
+        "indicators": _clean_prose(
+            _section_by_any(sections, ["governance", "forensic", "indicator"]) or mgmt,
+            max_len=400,
+        ),
+        # ── Slide 15: SAARTHI ─────────────────────────────────────────────────
+        "saarthi_heading":  "SAARTHI Score Analysis",
+        "saarthi_content":  _clean_prose(saarthi_assessment, max_len=600),
+    }
+
+    # ── Scenario data (Slides 16, 18) ─────────────────────────────────────────
+    scenarios = fin_model.get("scenarios") or []
+    bear_tp_f = 0.0
+    for s in scenarios:
+        name  = str(s.get("name", "")).lower()
+        notes = _clean_prose(str(s.get("notes", "")), max_len=200)
+        prob  = str(s.get("probability_pct", "") or "")
+        tp    = str(s.get("target_price", "") or "")
+        prob_disp = (prob + "%") if prob and not prob.endswith("%") else prob
+        if "bull" in name:
+            replacements["valuation_bull"] = tp
+            replacements["bull"]           = tp
+            replacements["bull_p"]         = prob_disp
+            replacements["bull_content"]   = notes
+        elif "bear" in name:
+            replacements["valuation_bear"] = tp
+            replacements["bear"]           = tp
+            replacements["bear_p"]         = prob_disp
+            replacements["bear_content"]   = notes
+            bear_tp_f = _parse_number(tp) or 0.0
+        elif "base" in name:
+            replacements["base"]           = tp   # template uses {{base}}, not {{valuation_base}}
+            replacements["base_p"]         = prob_disp
+            replacements["base_content"]   = notes
+
+    # ── Trading Strategy (Slide 18) ───────────────────────────────────────────
+    trading = fin_model.get("trading_strategy") or {}
+    entry_text = _clean_prose(
+        str(trading.get("entry_rationale") or trading.get("entry_range") or
+            "Accumulate at current market price with defined risk."),
+        max_len=300,
+    )
+    review_metrics = trading.get("review_metrics") or []
+    review_text = _clean_prose(
+        str(trading.get("review_frequency") or
+            "; ".join(str(m) for m in review_metrics[:2]) or
+            "Review quarterly against thesis milestones."),
+        max_len=300,
+    )
+    exits = trading.get("thesis_breaking_exits") or []
+    exit_text = _clean_prose(
+        str(trading.get("downside_exit") or
+            "; ".join(str(x) for x in exits[:2]) or
+            "Exit on thesis invalidation or sustained breach of support."),
+        max_len=300,
+    )
+    replacements["entry_strategy_1"]  = entry_text
+    replacements["review_strategy_2"] = review_text
+    replacements["exit_strategy_3"]   = exit_text
+
+    # Slide 18 price analytics — downside % and stop-loss derived from bear scenario
+    cmp_val_f = _parse_number(metadata.get("cmp") or "") or 0.0
+    if bear_tp_f <= 0:
+        bear_tp_f = round(cmp_val_f * 0.85, 1)
+    stp_loss_val = round(bear_tp_f, 1)
+    if cmp_val_f > 0:
+        down_pct  = round((bear_tp_f - cmp_val_f) / cmp_val_f * 100, 1)
+        down_disp = f"{down_pct}%"
+    else:
+        down_disp = ""
+    replacements["stp_loss"] = str(stp_loss_val)
+    replacements["down"]     = down_disp
+    replacements["pnt"]      = metadata.get("cmp", "")  # accumulation pivot point
+
+    return replacements
+
+
+# ── Placeholder preview (called by /preview-placeholders) ─────────────────────
+
+def preview_ppt_placeholders(report_id: str, session_id: str) -> dict:
+    """Compute all text placeholder values without generating the PPTX.
+
+    Also merges any previously saved overrides from `cs_ppt_data` so the UI
+    shows the last confirmed values when the user re-opens the panel.
+    """
+    warnings: list[str] = []
+    client = get_service_client()
+    report, session, sections = _fetch_inputs(client, report_id, session_id)
+    ticker = (report.get("nse_symbol") or "UNKNOWN").upper()
+
+    company  = _build_company(report, session, sections)
+    metadata = _build_metadata(report, sections)
+    model_json = _download_model_json(client, ticker, warnings)
+    fin_model  = _build_financial_model(ticker, model_json, warnings)
+    fin_model  = _enrich_financial_model_for_house_deck(fin_model, report, sections, metadata)
+
+    placeholders = map_replacements(company, metadata, fin_model, sections)
+
+    # Merge previously-saved overrides so the UI shows confirmed values
+    saved_raw = report.get("cs_ppt_data") or ""
+    has_saved = bool(saved_raw)
+    if saved_raw:
+        try:
+            saved = json.loads(saved_raw)
+            if isinstance(saved, dict):
+                placeholders.update(saved)
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "placeholders": placeholders,
+        "has_saved_overrides": has_saved,
+        "warnings": warnings,
+    }
+
+# ── Per-slide chart data mapping ──────────────────────────────────────────────
+# Maps slide_type → which financial series names to include in native PPTX charts.
+# The first series' periods become the category labels.
+_SLIDE_CHART_SERIES: dict[str, list[str]] = {
+    "cover":               ["Revenue", "EBITDA", "PAT"],
+    "story_charts":        ["Revenue", "EBITDA", "PAT"],
+    "earnings_forecast":   ["Revenue", "EBITDA", "PAT"],
+    "financial_highlights":["EBITDA Margin", "PAT Margin", "ROE"],
+    "valuation":           ["Revenue", "EBITDA"],
+    "business_segments":   ["Revenue", "EBITDA"],
+    "industry":            ["Revenue"],
+}
+
+# Maps table_key → which financial series to write into a PPTX table shape.
+# "table_key" is either the shape name suffix after "table:" or the slide_type.
+_TABLE_SERIES: dict[str, list[str]] = {
+    "earnings_forecast":   ["Revenue", "EBITDA", "PAT", "EBITDA Margin", "PAT Margin"],
+    "financial_highlights":["EBITDA Margin", "PAT Margin", "ROE", "ROCE"],
+    "valuation":           ["Revenue", "EBITDA", "PAT"],
+}
+
+
+def _detect_slide_type(slide) -> str:
+    """Read slide type from a shape named 'slide_type' in the template.
+
+    In PowerPoint, open the Selection Pane and name one shape exactly
+    'slide_type', with its text content set to e.g. 'earnings_forecast'.
+    Falls back to 'generic' when no such shape is found.
+    """
+    for shape in slide.shapes:
+        if (shape.name or "").lower().strip() == "slide_type":
+            if hasattr(shape, "text_frame") and shape.text_frame:
+                return shape.text_frame.text.strip().lower()
+    return "generic"
+
+
+def _build_pptx_chart_data(slide_type: str, fin_model: dict) -> "CategoryChartData | None":
+    """Build a CategoryChartData for native PPTX chart replacement, per slide type."""
+    wants = _SLIDE_CHART_SERIES.get(slide_type, ["Revenue", "EBITDA", "PAT"])
+    series_list = fin_model.get("series") or []
+    matching = [
+        s for s in series_list
+        if any(w.lower() in (s.get("name") or "").lower() for w in wants)
+    ]
+    if not matching:
+        matching = series_list[:3]
+    if not matching:
+        return None
+
+    periods = matching[0].get("periods") or []
+    if not periods:
+        return None
+
+    cd = CategoryChartData()
+    cd.categories = periods
+    for s in matching[:3]:
+        vals = []
+        for v in (s.get("values") or []):
+            try:
+                vals.append(float(str(v).replace(",", "")) if v else 0.0)
+            except (ValueError, TypeError):
+                vals.append(0.0)
+        cd.add_series(s.get("name", "Metric"), vals)
+    return cd
+
+
+def _fill_table_from_model(table, table_key: str, fin_model: dict) -> None:
+    """Write financial series data into an existing PPTX table shape.
+
+    Row 0 is treated as the header (Metric | period1 | period2 ...).
+    Subsequent rows receive one series each. Only writes; never adds rows/cols.
+    """
+    wants = _TABLE_SERIES.get(table_key)
+    if not wants:
+        return
+
+    series_list = fin_model.get("series") or []
+    rows_data = [
+        s for s in series_list
+        if any(w.lower() in (s.get("name") or "").lower() for w in wants)
+    ]
+    if not rows_data:
+        return
+
+    periods = rows_data[0].get("periods") or []
+    n_data_cols = min(len(periods), len(table.columns) - 1)
+    n_data_rows = min(len(rows_data), len(table.rows) - 1)
+
+    if n_data_cols <= 0 or n_data_rows <= 0:
+        return
+
+    # Header row
+    try:
+        table.cell(0, 0).text = "Metric"
+        for ci, p in enumerate(periods[:n_data_cols]):
+            table.cell(0, ci + 1).text = str(p)
+    except Exception as e:
+        logger.warning("Table header write failed: %s", e)
+        return
+
+    # Data rows
+    for ri, s in enumerate(rows_data[:n_data_rows]):
+        try:
+            table.cell(ri + 1, 0).text = s.get("name", "")
+            for ci, val in enumerate((s.get("values") or [])[:n_data_cols]):
+                table.cell(ri + 1, ci + 1).text = str(val) if val is not None else "—"
+        except Exception as e:
+            logger.warning("Table row %d write failed: %s", ri, e)
+
+
+def _replace_text_in_frame(text_frame, replacements: dict) -> None:
+    """Replace {{key}} tokens in a text frame, preserving run font properties."""
+    for paragraph in text_frame.paragraphs:
+        full_text = paragraph.text
+        if not any(f"{{{{{k}}}}}" in full_text for k in replacements):
+            continue
+
+        # Capture font from first run before clearing
+        saved_font: dict = {}
+        if paragraph.runs:
+            f = paragraph.runs[0].font
+            saved_font["name"]  = f.name
+            saved_font["size"]  = f.size
+            saved_font["bold"]  = f.bold
+            saved_font["color"] = None
+            if getattr(f.color, "type", None) == 1:
+                try:
+                    saved_font["color"] = f.color.rgb
+                except Exception:
+                    pass
+
+        for k, v in replacements.items():
+            full_text = full_text.replace(f"{{{{{k}}}}}", str(v) if v is not None else "")
+
+        paragraph.clear()
+        run = paragraph.add_run()
+        run.text = full_text
+        if saved_font:
+            if saved_font["name"]:  run.font.name  = saved_font["name"]
+            if saved_font["size"]:  run.font.size  = saved_font["size"]
+            if saved_font["bold"] is not None: run.font.bold = saved_font["bold"]
+            if saved_font["color"]: run.font.color.rgb = saved_font["color"]
+
+
+def _replace_text_in_table(shape, replacements: dict) -> None:
+    """Replace {{key}} tokens inside every cell of a table shape."""
+    for row in shape.table.rows:
+        for cell in row.cells:
+            if not hasattr(cell, "text_frame") or not cell.text_frame:
+                continue
+            for paragraph in cell.text_frame.paragraphs:
+                full_text = paragraph.text
+                if not any(f"{{{{{k}}}}}" in full_text for k in replacements):
+                    continue
+                for k, v in replacements.items():
+                    full_text = full_text.replace(
+                        f"{{{{{k}}}}}", str(v) if v is not None else "")
+                paragraph.text = full_text
+
+
+def _insert_image_into_shape(slide, shape, img_bytes: bytes) -> None:
+    """Replace a placeholder shape with a generated chart image at the same bounds."""
+    import io as _io
+    left, top, width, height = shape.left, shape.top, shape.width, shape.height
+    # Remove the original shape from the slide XML
+    sp_elem = shape._element
+    sp_elem.getparent().remove(sp_elem)
+    # Insert picture at same position/size
+    slide.shapes.add_picture(_io.BytesIO(img_bytes), left, top, width, height)
+
+
+def fill_master_template(
+    template_path: str,
+    output_path: str,
+    replacements: dict,
+    fin_model: dict,
+    company_name: str = "",
+) -> None:
+    """Fill master_template.pptx per-slide with text replacements, chart data,
+    financial tables, and generated chart images.
+
+    Shape naming convention in the template (PowerPoint Selection Pane):
+      - Any shape              : plain text with {{placeholder}} tokens → replaced
+      - Named 'slide_type'     : text content declares the slide type (e.g. 'earnings_forecast')
+      - Named 'chart:<key>'    : replaced with a matplotlib chart image (see chart_generators.py)
+      - Named 'table:<key>'    : populated from financial model series data
+      - Native PPTX chart      : data updated with per-slide-type series from financial model
+    """
+    prs = Presentation(template_path)
+
+    for slide in prs.slides:
+        slide_type = _detect_slide_type(slide)
+        pptx_chart_data = _build_pptx_chart_data(slide_type, fin_model)
+
+        # Shapes marked for image insertion must be processed after iteration
+        # (removing while iterating breaks the list).  Collect them first.
+        image_insertions: list[tuple] = []  # (shape, img_bytes)
+
+        for shape in slide.shapes:
+            shape_name = (shape.name or "").lower().strip()
+
+            # ── 1. chart:<key> shape → generate PNG and queue for insertion ──
+            if shape_name.startswith("chart:"):
+                chart_key = shape_name[6:]
+                img = generate_chart(chart_key, fin_model, company_name)
+                if img:
+                    image_insertions.append((shape, img))
+                continue  # skip further processing on this shape
+
+            # ── 2. Native PPTX chart → update series data per slide type ──────
+            if shape.has_chart and pptx_chart_data:
+                try:
+                    shape.chart.replace_data(pptx_chart_data)
+                except Exception as e:
+                    logger.warning("chart.replace_data failed on slide '%s': %s", slide_type, e)
+
+            # ── 3. table:<key> or financial slide table → populate from model ─
+            if shape.has_table:
+                # Determine table key: explicit name wins, else use slide type
+                if shape_name.startswith("table:"):
+                    table_key = shape_name[6:]
+                else:
+                    table_key = slide_type
+                _fill_table_from_model(shape.table, table_key, fin_model)
+                _replace_text_in_table(shape, replacements)
+
+            # ── 4. Text frame → {{placeholder}} replacement ───────────────────
+            elif hasattr(shape, "text_frame") and shape.text_frame:
+                _replace_text_in_frame(shape.text_frame, replacements)
+
+        # ── 5. Insert queued chart images (after shape iteration is done) ──────
+        for shape, img_bytes in image_insertions:
+            try:
+                _insert_image_into_shape(slide, shape, img_bytes)
+            except Exception as e:
+                logger.warning("Image insert failed for '%s': %s", shape.name, e)
+
+    prs.save(output_path)
+
 
 def generate_pptx_for_report(report_id: str, session_id: str, *, use_mock: bool = False) -> dict:
     """Top-level orchestrator. Returns the response payload for /generate-pptx."""
@@ -1064,28 +1266,55 @@ def generate_pptx_for_report(report_id: str, session_id: str, *, use_mock: bool 
         }
         bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
 
-        logger.info("running reportgen pipeline use_mock=%s", use_mock)
-        _install_house_planner_patch()
-        with _reportgen_cwd():
-            result = run_local_pipeline(bundle_path=bundle_path, output_root=output_root, use_mock=use_mock)
+        logger.info("Filling master template directly")
 
-        if result.manifest.notes:
-            warnings.extend(result.manifest.notes)
+        replacements = map_replacements(company, metadata, fin_model, sections)
 
-        if result.manifest.status == "render_failed" or not result.pptx_path:
-            raise RuntimeError(f"reportgen render_failed: {'; '.join(result.manifest.notes) or 'unknown'}")
+        # Apply saved PPT placeholder overrides confirmed by the user in the UI
+        saved_ppt_raw = report.get("cs_ppt_data") or ""
+        if saved_ppt_raw:
+            try:
+                saved_overrides = json.loads(saved_ppt_raw)
+                if isinstance(saved_overrides, dict):
+                    replacements.update(saved_overrides)
+                    logger.info("Applied %d saved PPT overrides from cs_ppt_data", len(saved_overrides))
+            except Exception as e:
+                logger.warning("Failed to parse cs_ppt_data overrides: %s", e)
+
+        # Check multiple possible paths for the master template (local vs docker)
+        possible_paths = [
+            Path(__file__).resolve().parent.parent.parent / "master_template.pptx",  # local repo structure
+            Path(__file__).resolve().parent / "master_template.pptx",  # If dumped in the same directory
+            Path("/app/master_template.pptx"), # Docker container path
+            Path("master_template.pptx"), # Current working directory
+        ]
+        
+        template_path = None
+        for p in possible_paths:
+            if p.exists():
+                template_path = p
+                break
+                
+        if not template_path:
+            raise RuntimeError(f"Master template not found in any of the expected locations.")
+
+        result_pptx_path = str(output_root / "report.pptx")
+        
+        if template_path.exists():
+            fill_master_template(
+                str(template_path), result_pptx_path, replacements, fin_model,
+                company_name=company.get("name", ""),
+            )
+        else:
+            raise RuntimeError(f"Master template not found at {template_path}")
 
         # Upload artifacts
-        pptx_key = f"{ticker}/{report_id}/report.pptx"
-        pptx_path_out, pptx_url = _upload(client, result.pptx_path, pptx_key, PPTX_CONTENT_TYPE)
+        ts = int(time.time())
+        pptx_key = f"{ticker}/{report_id}/report_{ts}.pptx"
+        pptx_path_out, pptx_url = _upload(client, Path(result_pptx_path), pptx_key, PPTX_CONTENT_TYPE)
 
         pdf_path_out: str | None = None
         pdf_url: str | None = None
-        if result.pdf_path and Path(result.pdf_path).exists():
-            pdf_key = f"{ticker}/{report_id}/report.pdf"
-            pdf_path_out, pdf_url = _upload(client, result.pdf_path, pdf_key, PDF_CONTENT_TYPE)
-        else:
-            warnings.append("PDF conversion skipped (no LibreOffice/PowerPoint detected)")
 
     # Update DB
     now_iso = datetime.now(timezone.utc).isoformat()

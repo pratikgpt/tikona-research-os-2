@@ -560,6 +560,22 @@ td.accent { color: var(--accent); font-weight: 700; }
 .mgmt-role { font-size: 5.5pt; color: var(--mid-grey); }
 .mgmt-bio { font-size: 6.5pt; color: var(--text-light); line-height: 1.35; }
 
+/* ═══ STORY CHARTS — 3×2 GRID ═══ */
+.chart-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 4px;
+}
+.story-chart-cell {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  min-width: 0;
+}
+.story-chart-cell .figure { margin-bottom: 0; }
+
 /* ═══ FIGURES / CHARTS ═══ */
 .figure { margin-bottom: 6px; }
 .figure-title {

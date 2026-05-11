@@ -280,39 +280,101 @@ def download_screener_excel(symbol: str, output_dir: str, screener_username: str
         raise Exception("❌ Screener login failed — /dash/ redirected to login page. Check SCREENER_USERNAME/PASSWORD.")
     logger.info("✅ Screener login OK (probe URL: %s)", probe.url)
 
-    selected_url = None
+    company_url = None
+    page_resp = None
     for suffix in [f"{symbol}/consolidated/", f"{symbol}/"]:
         url = f"https://www.screener.in/company/{suffix}"
         resp = session.get(url, timeout=15)
         if resp.status_code == 200:
-            selected_url = url
+            company_url = resp.url  # use final URL after any redirects
+            page_resp = resp
             break
     else:
         raise Exception(f"❌ {symbol} not found on Screener")
 
-    if selected_url and not selected_url.endswith("/consolidated/"):
-        logger.warning("⚠ Consolidated Screener page unavailable for %s — falling back to standalone numbers", symbol)
+    logger.info(f"📄 Company page resolved to: {company_url}")
 
-    soup = BeautifulSoup(resp.text, "html.parser")
-    btn = soup.find("button", attrs={"aria-label": "Export to Excel"}) or soup.find(
-        "button", string=lambda t: t and "Export" in str(t)
-    )
+    soup = BeautifulSoup(page_resp.text, "html.parser")
+
+    # Dump all forms and export-related strings from raw HTML for diagnosis
+    for f in soup.find_all("form"):
+        logger.info(f"  [FORM] action={f.get('action')} method={f.get('method')}")
+    for tag in soup.find_all(True):
+        for attr in ("href", "action", "formaction", "data-url"):
+            val = tag.get(attr, "")
+            if val and "export" in val.lower():
+                logger.info(f"  [EXPORT-ATTR] <{tag.name} {attr}={val}>")
+    import re as _re
+    for m in _re.findall(r'["\']([^"\']{5,120}export[^"\']{0,60})["\']', page_resp.text, _re.I)[:8]:
+        logger.info(f"  [EXPORT-RAW] {m}")
+
+    # Extract CSRF token from page HTML first (more reliable than cookie)
+    page_csrf_input = soup.find("input", {"name": "csrfmiddlewaretoken"})
+    csrf2_token = page_csrf_input["value"] if page_csrf_input else session.cookies.get("csrftoken", "")
+
+    export_url = None
+
+    # Try button with aria-label
+    btn = soup.find("button", attrs={"aria-label": "Export to Excel"})
+    # Try button with export text (case-insensitive)
     if not btn:
-        raise Exception("❌ Export button not found on Screener page")
-    export_url = btn.get("formaction", "")
-    if not export_url.startswith("http"):
-        export_url = "https://www.screener.in" + export_url
+        btn = soup.find("button", string=lambda t: t and "export" in str(t).lower())
+    # Try anchor with export in href
+    if not btn:
+        btn = soup.find("a", href=lambda h: h and "export" in str(h).lower())
+    # Try form whose action contains "export"
+    if not btn:
+        form = soup.find("form", action=lambda a: a and "export" in str(a).lower())
+        if form:
+            action = form.get("action", "")
+            export_url = action if action.startswith("http") else "https://www.screener.in" + action
+            ci = form.find("input", {"name": "csrfmiddlewaretoken"})
+            if ci:
+                csrf2_token = ci["value"]
 
-    form = btn.find_parent("form")
-    csrf2 = (form or soup).find("input", {"name": "csrfmiddlewaretoken"})
+    if btn and not export_url:
+        raw = btn.get("formaction", "") or btn.get("href", "")
+        export_url = raw if raw.startswith("http") else "https://www.screener.in" + raw
+        form = btn.find_parent("form")
+        ci = (form or soup).find("input", {"name": "csrfmiddlewaretoken"})
+        if ci:
+            csrf2_token = ci["value"]
+
+    # Screener now uses a no-action POST form — submits back to the company page URL
+    if not export_url:
+        for f in soup.find_all("form"):
+            if f.get("action") is None and (f.get("method") or "").lower() == "post":
+                export_url = company_url
+                ci = f.find("input", {"name": "csrfmiddlewaretoken"})
+                if ci:
+                    csrf2_token = ci["value"]
+                logger.info(f"  Found no-action POST form → submitting to {export_url}")
+                break
+
+    # Last-resort fallback
+    if not export_url:
+        export_url = company_url
+        logger.warning(f"⚠️  No export form found; POSTing to company URL: {export_url}")
+
+    logger.info(f"📥 POSTing export: {export_url}")
     file_resp = session.post(
         export_url,
-        data={"csrfmiddlewaretoken": csrf2["value"]},
-        headers={"Referer": url, "Origin": "https://www.screener.in"},
+        data={"csrfmiddlewaretoken": csrf2_token},
+        headers={
+            "Referer": company_url,
+            "Origin": "https://www.screener.in",
+            "X-CSRFToken": csrf2_token,
+            "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*",
+        },
         timeout=30,
     )
-    if "html" in file_resp.headers.get("Content-Type", "").lower():
-        raise Exception("❌ Got HTML instead of Excel from Screener export")
+    content_type = file_resp.headers.get("Content-Type", "").lower()
+    if "html" in content_type:
+        snippet = file_resp.text[:300].replace("\n", " ")
+        raise Exception(
+            f"❌ Got HTML instead of Excel from Screener export "
+            f"(status={file_resp.status_code}, url={file_resp.url}, preview: {snippet})"
+        )
 
     out_path = os.path.join(output_dir, f"{symbol}_screener.xlsx")
     with open(out_path, "wb") as f:
@@ -850,7 +912,14 @@ STEP 3 — BALANCE SHEET PROJECTIONS (absolute values):
 - share_capital, reserves, borrowings, other_liabilities
 Cash = PLUG. Balance Sheet MUST balance every year.
 
-STEP 4 — HISTORICAL RATIOS (last 6 years):
+STEP 4 — HISTORICAL FINANCIALS IN ABSOLUTE TERMS (last 6 years):
+Use web_search to find the company's annual revenue, EBITDA, and PAT in ₹ Crores for each
+of the last 6 fiscal years. This is CRITICAL for recently-IPO'd or platform businesses
+(e.g., Swiggy, Zomato) where the Screener data above may show nulls. Search for:
+  "{company_name} annual revenue EBITDA PAT FY20 FY21 FY22 FY23 FY24 FY25 crores"
+  "{company_name} annual report revenue profit loss"
+
+STEP 5 — HISTORICAL RATIOS (last 6 years):
 - ebitda_margin_pct, pat_margin_pct, roe_pct, roce_pct
 - debt_equity, receivable_days, inventory_days, asset_turnover
 - rm_pct, employee_pct, tax_rate_pct
@@ -948,6 +1017,12 @@ Return ONLY valid JSON. Start with {{ end with }}. No prose, no markdown fences.
     "ebitda_margin_pct":[6], "pat_margin_pct":[6], "roe_pct":[6], "roce_pct":[6],
     "debt_equity":[6], "receivable_days":[6], "inventory_days":[6], "asset_turnover":[6],
     "rm_pct":[6], "employee_pct":[6], "tax_rate_pct":[6]
+  }},
+  "historical_pl_absolute": {{
+    "years": [last 6 FY — same order as historical_ratios.years],
+    "revenue": [6 values in ₹ Cr, use null only if truly unavailable after web search],
+    "ebitda":  [6 values in ₹ Cr, null if unavailable],
+    "pat":     [6 values in ₹ Cr, null if unavailable]
   }},
   "valuation": {{
     "dcf_fair_value":number, "pe_fair_value":number,
@@ -3815,6 +3890,98 @@ def build_model(screener_path: str, screener_data: dict, model: dict, out_path: 
 
 
 # ══════════════════════════════════════════════════════════════════
+# P&L SERIES EMBEDDER
+# ══════════════════════════════════════════════════════════════════
+def _embed_pl_series(model_json: dict, screener_data: dict) -> None:
+    """Compute Revenue/EBITDA/PAT series and store them in model_json in-place.
+
+    The Excel model derives these via cell formulas that are never persisted to
+    JSON. Without this step the PPTX generator has no absolute P&L numbers to
+    put in charts, so slides show zeros or placeholder data.
+
+    We use:
+      - screener_data for the historical series (audited actuals)
+      - model_json["assumptions"] growth/margin for the projection series
+    Both halves are stored so the chart can show a full historical+forward view.
+    """
+    hist_years: list[str] = screener_data.get("fiscal_years") or []
+    pl = screener_data.get("pl") or {}
+    derived = screener_data.get("derived") or {}
+
+    hist_revenue = pl.get("sales") or []
+    hist_ebitda  = derived.get("ebitda") or []
+    hist_pat     = pl.get("net_profit") or []
+
+    # For recently-IPO'd / platform businesses (e.g. Swiggy, Zomato) Screener
+    # often returns null for row 17 (sales). Fall back to the absolute values
+    # Claude fetched via web_search, aligned to the same year list.
+    web_pl = model_json.get("historical_pl_absolute") or {}
+    web_years: list[str] = [str(y) for y in (web_pl.get("years") or [])]
+
+    def _align_web(screener_vals: list, web_vals: list) -> list:
+        """Return screener_vals, patching any None entries from web_vals aligned by year."""
+        if not web_vals or len(web_vals) != len(web_years):
+            return screener_vals
+        web_by_yr = dict(zip(web_years, web_vals))
+        out = []
+        for yr, sv in zip(hist_years, screener_vals):
+            out.append(sv if sv is not None else web_by_yr.get(yr))
+        if len(screener_vals) < len(hist_years):
+            out = screener_vals
+        return out
+
+    hist_revenue = _align_web(hist_revenue, web_pl.get("revenue") or [])
+    hist_ebitda  = _align_web(hist_ebitda,  web_pl.get("ebitda")  or [])
+    hist_pat     = _align_web(hist_pat,     web_pl.get("pat")     or [])
+
+    # If Screener returned no years at all but web search has data, use web data directly
+    if not hist_years and web_years:
+        hist_years   = web_years
+        hist_revenue = web_pl.get("revenue") or []
+        hist_ebitda  = web_pl.get("ebitda")  or []
+        hist_pat     = web_pl.get("pat")     or []
+
+    model_json["historical_pl"] = {
+        "years":   hist_years,
+        "revenue": hist_revenue,
+        "ebitda":  hist_ebitda,
+        "pat":     hist_pat,
+    }
+
+    asmp = model_json.get("assumptions") or {}
+    proj_years: list[str] = asmp.get("projection_years") or []
+    revenue_growth: dict   = asmp.get("revenue_growth_pct") or {}
+
+    hist_ratios = model_json.get("historical_ratios") or {}
+    ebitda_margins = [v for v in (hist_ratios.get("ebitda_margin_pct") or []) if v is not None]
+    pat_margins    = [v for v in (hist_ratios.get("pat_margin_pct")    or []) if v is not None]
+    ebitda_m = ebitda_margins[-1] if ebitda_margins else 15.0
+    pat_m    = pat_margins[-1]    if pat_margins    else 8.0
+
+    # Base revenue = last non-null historical value
+    base_rev = next((v for v in reversed(hist_revenue) if v is not None), None)
+
+    proj_revenues: list = []
+    proj_ebitdas:  list = []
+    proj_pats:     list = []
+    prev = base_rev
+    for yr in proj_years:
+        growth = (revenue_growth.get(yr) or 0) / 100
+        rev = round(prev * (1 + growth), 1) if prev is not None else None
+        proj_revenues.append(rev)
+        proj_ebitdas.append(round(rev * ebitda_m / 100, 1) if rev is not None else None)
+        proj_pats.append(   round(rev * pat_m    / 100, 1) if rev is not None else None)
+        prev = rev
+
+    model_json["projected_pl"] = {
+        "years":   proj_years,
+        "revenue": proj_revenues,
+        "ebitda":  proj_ebitdas,
+        "pat":     proj_pats,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════
 # PUBLIC ENTRY POINT
 # ══════════════════════════════════════════════════════════════════
 def generate_financial_model(
@@ -3853,6 +4020,12 @@ def generate_financial_model(
     model_json = normalize_model_output(model_json, screener_data)
     validated_model = validate_model_output(model_json, nse_code)
     model_json = validated_model.model_dump()
+
+    # Embed computed P&L series so the PPTX generator can build real charts.
+    # The Excel model uses formulas that aren't stored in the JSON, so we
+    # recompute Revenue/EBITDA/PAT here from the Screener historical base +
+    # Claude's growth/margin assumptions.
+    _embed_pl_series(model_json, screener_data)
 
     json_path = os.path.join(output_dir, f"{nse_code}_model.json")
     with open(json_path, "w") as f:

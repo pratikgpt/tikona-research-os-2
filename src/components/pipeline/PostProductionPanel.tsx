@@ -36,7 +36,9 @@ import {
   Wifi,
   WifiOff,
   RefreshCw,
+  FileEdit,
 } from 'lucide-react';
+import PPTDataPanel from './PPTDataPanel';
 
 const N8N_BASE = 'https://n8n.tikonacapital.com/webhook';
 
@@ -87,6 +89,10 @@ export default function PostProductionPanel({
   const [videoGenerating, setVideoGenerating] = useState(false);
   const [videoFileUrl, setVideoFileUrl] = useState<string | null>(null);
   const [videoElapsedSeconds, setVideoElapsedSeconds] = useState(0);
+
+  // --- PPT Data ---
+  const [pptDataConfirmed, setPptDataConfirmed] = useState(false);
+  const [pptDataOpen, setPptDataOpen] = useState(true);
 
   // --- UI ---
   const [scriptExpanded, setScriptExpanded] = useState(false);
@@ -467,6 +473,58 @@ export default function PostProductionPanel({
       </div>
 
       <div className="divide-y divide-neutral-100">
+        {/* === Step 0: Review & Confirm PPT Content === */}
+        <div className="px-4 py-4">
+          <button
+            type="button"
+            onClick={() => setPptDataOpen(o => !o)}
+            className="w-full flex items-center justify-between group"
+          >
+            <div className="flex items-start gap-3">
+              <div className={cn(
+                'flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold shrink-0 mt-0.5',
+                pptDataConfirmed
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-accent-100 text-accent-700',
+              )}>
+                {pptDataConfirmed ? <Check className="h-3.5 w-3.5" strokeWidth={2.5} /> : <FileEdit className="h-3 w-3" />}
+              </div>
+              <div className="text-left">
+                <p className={cn(
+                  'text-sm font-medium',
+                  pptDataConfirmed ? 'text-green-700' : 'text-neutral-900',
+                )}>
+                  Review PPT Content
+                  {!pptDataConfirmed && (
+                    <span className="ml-2 text-[10px] font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                      Recommended before generating
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-neutral-400">
+                  {pptDataConfirmed
+                    ? 'Content confirmed — all text placeholders are set'
+                    : 'Review, edit, and confirm the text that will fill each slide'}
+                </p>
+              </div>
+            </div>
+            <div className="text-neutral-400 group-hover:text-neutral-600 transition-colors ml-2">
+              {pptDataOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </div>
+          </button>
+
+          {pptDataOpen && (
+            <div className="mt-3 pl-9">
+              <PPTDataPanel
+                reportId={reportId}
+                sessionId={sessionId}
+                serviceAvailable={serviceHealth === 'ok'}
+                onConfirmed={() => setPptDataConfirmed(true)}
+              />
+            </div>
+          )}
+        </div>
+
         {/* === Step 1: Generate PPTX === */}
         <StepRow
           number={1}

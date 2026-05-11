@@ -41,10 +41,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import uvicorn
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(REPO_ROOT / "PPT-generator"))
 
-from pptx_generator import generate_pptx_for_report
+from pptx_generator import generate_pptx_for_report, preview_ppt_placeholders
 
 logging.basicConfig(
     level=logging.INFO,
@@ -79,6 +79,11 @@ class GeneratePptxRequest(BaseModel):
     useMock: bool = False
 
 
+class PreviewPlaceholdersRequest(BaseModel):
+    reportId: str
+    sessionId: str
+
+
 class GeneratePptxResponse(BaseModel):
     status: str
     message: str
@@ -110,6 +115,20 @@ def health():
         "supabase": bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY")),
         "openrouter_key": bool(os.environ.get("REPORTGEN_OPENROUTER_API_KEY")),
     }
+
+
+@app.post("/preview-placeholders")
+def preview_placeholders(req: PreviewPlaceholdersRequest):
+    logger.info("POST /preview-placeholders report=%s session=%s", req.reportId, req.sessionId)
+    try:
+        result = preview_ppt_placeholders(req.reportId, req.sessionId)
+        return result
+    except Exception as exc:
+        logger.error("preview_placeholders failed: %s\n%s", exc, traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(exc)[:500]},
+        )
 
 
 @app.post("/generate-pptx", response_model=GeneratePptxResponse)
@@ -158,21 +177,7 @@ def _print_banner(port: int) -> None:
     print(bar)
 
 
-def _find_reportgen_root() -> Path:
-    import reportgen
-
-    package_path = Path(reportgen.__file__).resolve()
-    for parent in package_path.parents:
-        if (parent / "prompts" / "user" / "slide_planner_input.md").exists():
-            return parent
-    raise RuntimeError(f"Could not find reportgen prompts root from {package_path}")
-
-
 if __name__ == "__main__":
-    # reportgen resolves prompts/ relative to cwd, so run from the installed
-    # reportgen project root rather than assuming this repo has a pptx/ clone.
-    pptx_root = _find_reportgen_root()
-    os.chdir(pptx_root)
     port = int(os.environ.get("PORT", 8501))
     _print_banner(port)
     uvicorn.run(app, host="0.0.0.0", port=port)

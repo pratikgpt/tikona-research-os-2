@@ -35,8 +35,16 @@ class FinancialModel(BaseModel):
 
     def get(self, metric: str) -> FinancialRow | None:
         key = metric.strip().lower()
+        # 1. Exact case-insensitive match
         for r in self.rows:
             if r.metric.strip().lower() == key:
+                return r
+        # 2. Partial match — key is a substring of row metric or vice versa
+        # Mirrors the approach used in _render_cover_fin_table so chart rendering
+        # degrades gracefully when LLM uses a slightly different metric name.
+        for r in self.rows:
+            rm = r.metric.strip().lower()
+            if key in rm or rm in key:
                 return r
         return None
 
@@ -76,12 +84,12 @@ PageType = Literal[
     "valuation",           # 10. Valuations (multi-method)
     "scorecard",           # 11. SAARTHI Framework
     "scenario_analysis",   # 12. Scenario Analysis (Bull/Base/Bear)
-    "entry_strategy",      # 13. Entry, Review, Exit Strategy
-    "catalysts",           # Catalysts (optional, LLM can use)
-    "risks",               # Risks (optional, LLM can use)
+    "risks",               # 13. Key Risks & Thesis Invalidation Triggers
+    "entry_strategy",      # 14. Entry, Review, Exit Strategy
+    "catalysts",           # 15. Upcoming Catalysts
     "peer_comparison",     # Peer Comparison (optional)
     "esg",                 # ESG (optional)
-    "disclaimer",          # 14. Disclaimer (fixed content, auto-appended)
+    "disclaimer",          # Fixed content, auto-appended
     "appendix",            # Appendix (optional)
 ]
 
@@ -188,6 +196,7 @@ class TableBlock(BaseModel):
     headers: list[str]
     rows: list[list[str]]
     footnote: str | None = None
+    highlight_rows: list[int] = [0]  # 0-indexed data rows to highlight; default = first row only
     model_config = ConfigDict(extra="forbid")
 
 

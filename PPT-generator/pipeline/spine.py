@@ -14,7 +14,7 @@ import json
 from typing import Any
 
 from .llm_client import LLMClient
-from .schemas import CompanyPack, PageBrief, SpineOutline
+from .schemas import CompanyPack, SpineOutline
 
 
 ALLOWED_PAGE_TYPES = [
@@ -30,9 +30,9 @@ ALLOWED_PAGE_TYPES = [
     "valuation",
     "scorecard",
     "scenario_analysis",
+    "risks",
     "entry_strategy",
     "catalysts",
-    "risks",
     "peer_comparison",
     "esg",
     "appendix",
@@ -44,39 +44,35 @@ SPINE_SYSTEM = """You are a senior equity research editor at an Indian instituti
 brokerage (think IIFL / Jefferies India). You plan the structure of landscape \
 research reports before analysts draft them.
 
-Your job: given a company research pack, decide the report's outline.
+Your job: given a company research pack, write the title, key_message, and data_slices \
+for each of the MANDATORY pages below. You CANNOT skip, reorder, or replace any of them.
 
-RECOMMENDED SECTION ORDER (follow this as closely as data permits):
-  1. cover          — Teaser page. Deal maker/breaker. Recommendation + why, in 60 seconds.
-  2. story_charts   — Story in charts: 2/3 visuals, 1/3 text. Charts tell the story.
-  3. thesis         — Investment Thesis (1 page). Core idea + risks + valuation summary.
-  4. industry       — Industry Overview. Sector growth, structural drivers, key risks.
-  5. company_overview — What the company does. Revenue split. Business explainable in 2 sentences.
-  6. business_segments — Key Investment Ideas. Sector positioning, differentiation, growth drivers, moat.
-  7. management     — Management Analysis. Governance quality, board structure, credibility.
-  8. earnings_forecast — Earnings Forecast. 3Y historical + 2Y forward. State assumptions.
-  9. financial_highlights — Financials. P&L, Balance Sheet, Cash Flow, margins, key ratios.
-  10. valuation     — Valuations. Multi-method (P/E, EV/EBITDA, DCF). Sensitivity analysis.
-  11. scorecard     — SAARTHI Framework. EVERY dimension detailed with progress bars.
-  12. scenario_analysis — Scenario Analysis. Bull/Base/Bear cases with assumptions & impact.
-  13. entry_strategy — Entry, Review, Exit Strategy. When to buy, thesis invalidation triggers.
+MANDATORY PAGE STRUCTURE — output EXACTLY these 14 pages in this order:
+   1.  cover            — Teaser page. Deal maker/breaker. Recommendation + why, in 60 seconds.
+   2.  story_charts     — Story in Charts. 6 key financial charts that tell the whole story visually.
+   3.  thesis           — Investment Thesis. Core bull case, valuation summary, key risks.
+   4.  industry         — Industry Overview. Sector tailwinds, structural drivers, key risks.
+   5.  company_overview — Company Overview. What it does, revenue split, 2-sentence explainer.
+   6.  business_segments — Key Investment Idea in Detail. Business model, demand drivers, competitive landscape.
+   7.  management       — Management & Corporate Governance. Board quality, track record, credibility.
+   8.  earnings_forecast — Earnings Forecast. 3Y historical + 2–3Y forward P&L, key assumptions stated.
+   9.  financial_highlights — Financials — Key Ratios. Margin + return + valuation multiple trajectory.
+   10. valuation        — Valuations. Multi-method (P/E, EV/EBITDA, DCF/SOTP). Sensitivity / scenario.
+   11. scorecard        — SAARTHI Framework. Every dimension with progress bars and detailed commentary.
+   12. scenario_analysis — Scenario Analysis. Bull / Base / Bear cases with explicit assumptions.
+   13. risks            — Key Risks & Thesis Invalidation Triggers. What kills the thesis.
+   14. entry_strategy   — Entry, Review & Exit Strategy. When to buy, hold, and exit.
 
-You may ADD optional pages (catalysts, risks, peer_comparison, esg, appendix) if data supports them.
-You may SKIP sections if the data pack doesn't have enough content for them.
-Do NOT include a "disclaimer" page — that is auto-appended by the system.
+Do NOT include a "disclaimer" page — it is auto-appended by the system.
+Do NOT add optional pages (peer_comparison, esg, appendix, catalysts) unless explicitly requested.
 
 Rules:
-- Aim for 12–13 pages (excluding disclaimer). 13 is ideal. Do NOT pad.
-- Prefer combining related material into one strong page over splitting it across multiple pages.
-- Use optional pages only when they remove real crowding from a core page.
-- Prefer thesis + catalysts together when possible.
-- Prefer entry strategy + thesis invalidation triggers together when possible.
-- Avoid appendix/esg pages unless they are essential to the thesis.
-- Every page must advance the thesis. No filler.
-- Each page has one and only one "key_message" — a single sentence an analyst must prove.
+- Output EXACTLY 14 pages in the order above. No additions, no omissions.
+- Each page has one and only one "key_message" — a single sentence the page must prove.
 - The thesis_north_star is the ONE argument the whole report defends.
 - Use only these page types: {page_types}
 - "data_slices" are dotted keys from the narrative JSON the page will consume.
+- Every page must advance the thesis. No filler.
 """
 
 
