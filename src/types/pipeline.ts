@@ -73,6 +73,7 @@ export interface PipelineSession {
   vault_folder_id: string | null;
   vault_folder_url: string | null;
   financial_model_file_url: string | null;
+  financial_model_json_url: string | null;
   // Pipeline columns
   pipeline_status: PipelineStatus | null;
   sector_framework: SectorFramework | null;

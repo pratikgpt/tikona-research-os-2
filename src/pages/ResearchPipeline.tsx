@@ -369,7 +369,10 @@ export default function ResearchPipeline() {
       toast.success(`Financial model generated: ${modelResult.fileName}`);
 
       // Persist the Supabase Storage URL so downstream services can fetch it reliably.
-      await updatePipelineOutput(sessionId, { financial_model_file_url: storageResult.fileUrl });
+      await updatePipelineOutput(sessionId, {
+        financial_model_file_url: storageResult.fileUrl,
+        financial_model_json_url: storageResult.jsonFileUrl,
+      });
 
       await transitionPipelineStatus(sessionId, 'vault_ready', 'financial_model_generating');
       setPipelineStatus('vault_ready');

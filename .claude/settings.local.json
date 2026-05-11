@@ -127,7 +127,12 @@
       "Bash(.venv/Scripts/pip install *)",
       "Bash(timeout 15 .venv/Scripts/python scripts/ppt_service/main.py)",
       "Bash(.venv/Scripts/python -c ' *)",
-      "Bash(xargs cat *)"
+      "Bash(xargs cat *)",
+      "Bash(python3 -c \"import paramiko; print\\('paramiko ok'\\)\")",
+      "Bash(python -c \"import paramiko; print\\('paramiko ok'\\)\")",
+      "Bash(python3)",
+      "Bash(python3 -c ' *)",
+      "Bash(python -m py_compile scripts/financial_model_v5.py)"
     ]
   }
 }

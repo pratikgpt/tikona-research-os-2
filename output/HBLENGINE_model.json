@@ -1,0 +1,886 @@
+{
+  "sector": "Electrical Equipment - Batteries & Railway Electronics",
+  "base_year": "FY25",
+  "cmp": 829.7,
+  "target_price": 1125.0,
+  "rating": "BUY",
+  "upside_pct": 35.6,
+  "shares_cr": 2.772,
+  "assumptions": {
+    "projection_years": [
+      "FY26E",
+      "FY27E",
+      "FY28E",
+      "FY29E",
+      "FY30E"
+    ],
+    "revenue_growth_pct": {
+      "FY26E": 52.5,
+      "FY27E": 18.2,
+      "FY28E": 15.8,
+      "FY29E": 12.5,
+      "FY30E": 10.2
+    },
+    "rm_pct": {
+      "FY26E": 48.5,
+      "FY27E": 49.2,
+      "FY28E": 49.8,
+      "FY29E": 50.2,
+      "FY30E": 50.5
+    },
+    "employee_pct": {
+      "FY26E": 8.8,
+      "FY27E": 8.5,
+      "FY28E": 8.2,
+      "FY29E": 8.0,
+      "FY30E": 7.8
+    },
+    "power_fuel_pct": {
+      "FY26E": 3.2,
+      "FY27E": 3.1,
+      "FY28E": 3.0,
+      "FY29E": 2.9,
+      "FY30E": 2.8
+    },
+    "other_mfg_pct": {
+      "FY26E": 10.5,
+      "FY27E": 10.2,
+      "FY28E": 9.8,
+      "FY29E": 9.5,
+      "FY30E": 9.2
+    },
+    "selling_admin_pct": {
+      "FY26E": 4.8,
+      "FY27E": 4.6,
+      "FY28E": 4.4,
+      "FY29E": 4.2,
+      "FY30E": 4.0
+    },
+    "other_exp_pct": {
+      "FY26E": 1.8,
+      "FY27E": 1.7,
+      "FY28E": 1.6,
+      "FY29E": 1.5,
+      "FY30E": 1.4
+    },
+    "chg_inventory_pct": {
+      "FY26E": 1.2,
+      "FY27E": 0.8,
+      "FY28E": 0.6,
+      "FY29E": 0.4,
+      "FY30E": 0.2
+    },
+    "depreciation_cr": {
+      "FY26E": 48.5,
+      "FY27E": 55.2,
+      "FY28E": 62.8,
+      "FY29E": 71.2,
+      "FY30E": 80.5
+    },
+    "interest_cr": {
+      "FY26E": 11.8,
+      "FY27E": 10.5,
+      "FY28E": 9.2,
+      "FY29E": 8.1,
+      "FY30E": 7.2
+    },
+    "other_income_cr": {
+      "FY26E": 42.5,
+      "FY27E": 38.8,
+      "FY28E": 41.2,
+      "FY29E": 44.8,
+      "FY30E": 48.5
+    },
+    "tax_rate_pct": {
+      "FY26E": 25.8,
+      "FY27E": 26.2,
+      "FY28E": 26.5,
+      "FY29E": 26.8,
+      "FY30E": 27.0
+    },
+    "capex_cr": {
+      "FY26E": 85.2,
+      "FY27E": 95.8,
+      "FY28E": 108.5,
+      "FY29E": 122.2,
+      "FY30E": 138.5
+    },
+    "receivable_days": {
+      "FY26E": 75.0,
+      "FY27E": 72.0,
+      "FY28E": 70.0,
+      "FY29E": 68.0,
+      "FY30E": 65.0
+    },
+    "inventory_days": {
+      "FY26E": 145.0,
+      "FY27E": 140.0,
+      "FY28E": 135.0,
+      "FY29E": 132.0,
+      "FY30E": 130.0
+    },
+    "dividend_payout_pct": 12.0,
+    "target_pe": 32.0,
+    "target_ev_ebitda": 18.0,
+    "wacc_pct": 12.8,
+    "terminal_growth_pct": 4.5,
+    "rationale": "Strong order book of \u20b92,999 cr provides 18-month revenue visibility. Kavach 4.0 approval gives competitive advantage. Defence & export growth offsetting telecom weakness. Margin expansion from product mix shift to higher-value segments."
+  },
+  "projections": {
+    "years": [
+      "FY26E",
+      "FY27E",
+      "FY28E",
+      "FY29E",
+      "FY30E"
+    ],
+    "net_block": [
+      432.5,
+      472.8,
+      518.2,
+      569.8,
+      627.8
+    ],
+    "cwip": [
+      75.2,
+      82.5,
+      91.2,
+      101.8,
+      114.2
+    ],
+    "investments": [
+      325.8,
+      368.5,
+      418.2,
+      475.8,
+      542.2
+    ],
+    "other_assets": [
+      1385.2,
+      1568.5,
+      1785.2,
+      2038.8,
+      2335.2
+    ],
+    "share_capital": [
+      27.72,
+      27.72,
+      27.72,
+      27.72,
+      27.72
+    ],
+    "reserves": [
+      1745.8,
+      2088.5,
+      2485.2,
+      2948.8,
+      3489.2
+    ],
+    "borrowings": [
+      68.5,
+      62.8,
+      58.2,
+      54.1,
+      50.8
+    ],
+    "other_liabilities": [
+      478.5,
+      542.8,
+      618.2,
+      708.5,
+      816.2
+    ],
+    "cfo": [
+      285.2,
+      338.5,
+      395.8,
+      462.1,
+      538.2
+    ],
+    "cfi": [
+      -385.8,
+      -442.5,
+      -518.2,
+      -608.5,
+      -725.8
+    ],
+    "cff": [
+      -32.5,
+      -28.8,
+      -25.2,
+      -22.1,
+      -18.8
+    ]
+  },
+  "historical_ratios": {
+    "years": [
+      "FY20",
+      "FY21",
+      "FY22",
+      "FY23",
+      "FY24",
+      "FY25"
+    ],
+    "ebitda_margin_pct": [
+      7.4,
+      7.4,
+      11.2,
+      11.1,
+      19.0,
+      20.0
+    ],
+    "pat_margin_pct": [
+      2.4,
+      1.5,
+      7.6,
+      7.2,
+      12.6,
+      14.1
+    ],
+    "roe_pct": [
+      3.5,
+      1.8,
+      11.2,
+      10.7,
+      19.2,
+      18.7
+    ],
+    "roce_pct": [
+      8.8,
+      5.2,
+      20.8,
+      18.5,
+      29.2,
+      27.8
+    ],
+    "debt_equity": [
+      0.21,
+      0.09,
+      0.07,
+      0.09,
+      0.06,
+      0.05
+    ],
+    "receivable_days": [
+      102.0,
+      102.0,
+      86.0,
+      83.0,
+      58.0,
+      69.0
+    ],
+    "inventory_days": [
+      153.0,
+      152.0,
+      144.0,
+      148.0,
+      131.0,
+      195.0
+    ],
+    "asset_turnover": [
+      0.99,
+      0.88,
+      1.09,
+      1.06,
+      1.35,
+      0.99
+    ],
+    "rm_pct": [
+      62.1,
+      60.9,
+      61.5,
+      60.8,
+      54.1,
+      50.7
+    ],
+    "employee_pct": [
+      8.3,
+      9.0,
+      8.1,
+      8.1,
+      7.1,
+      9.1
+    ],
+    "tax_rate_pct": [
+      34.6,
+      29.4,
+      23.4,
+      24.2,
+      25.6,
+      26.0
+    ]
+  },
+  "valuation": {
+    "dcf_fair_value": 1085.0,
+    "pe_fair_value": 1152.0,
+    "ev_ebitda_fair_value": 1138.0,
+    "blended_fair_value": 1125.0,
+    "sensitivity_pe": {
+      "row_label": "PE Multiple",
+      "col_label": "EPS Growth %",
+      "row_values": [
+        28.0,
+        30.0,
+        32.0,
+        34.0,
+        36.0
+      ],
+      "col_values": [
+        15.0,
+        20.0,
+        25.0,
+        30.0,
+        35.0
+      ],
+      "grid": [
+        [
+          980.0,
+          1024.0,
+          1068.0,
+          1112.0,
+          1156.0
+        ],
+        [
+          1050.0,
+          1098.0,
+          1146.0,
+          1194.0,
+          1242.0
+        ],
+        [
+          1120.0,
+          1172.0,
+          1224.0,
+          1276.0,
+          1328.0
+        ],
+        [
+          1190.0,
+          1246.0,
+          1302.0,
+          1358.0,
+          1414.0
+        ],
+        [
+          1260.0,
+          1320.0,
+          1380.0,
+          1440.0,
+          1500.0
+        ]
+      ]
+    }
+  },
+  "peers": [
+    {
+      "name": "Exide Industries",
+      "mcap_cr": 12850.0,
+      "pe": 18.5,
+      "ev_ebitda": 12.8,
+      "ebitda_margin_pct": "14.2%",
+      "roe_pct": 15.8
+    },
+    {
+      "name": "Amara Raja Energy",
+      "mcap_cr": 18920.0,
+      "pe": 22.4,
+      "ev_ebitda": 15.2,
+      "ebitda_margin_pct": "16.8%",
+      "roe_pct": 18.2
+    },
+    {
+      "name": "Polycab India",
+      "mcap_cr": 85420.0,
+      "pe": 28.6,
+      "ev_ebitda": 18.5,
+      "ebitda_margin_pct": "12.5%",
+      "roe_pct": 22.1
+    },
+    {
+      "name": "Bosch Ltd",
+      "mcap_cr": 52850.0,
+      "pe": 35.2,
+      "ev_ebitda": 22.8,
+      "ebitda_margin_pct": "11.8%",
+      "roe_pct": 19.5
+    }
+  ],
+  "thesis": {
+    "investment_thesis": "HBL Engineering is uniquely positioned to benefit from India's infrastructure push, particularly railway safety modernization through Kavach systems. The company has strong technological moats with RDSO approval for Version 4.0 and a healthy order book of \u20b92,999 cr providing 18-month revenue visibility. Strategic shift from telecom-dependent business to higher-margin defence and export markets supports sustainable margin expansion.",
+    "bull_case": "Railway safety mandate creates multi-year revenue visibility; First-mover advantage in Kavach 4.0; Defence indigenization drives battery demand; Export growth to Middle East/Europe; Margin expansion from premium product mix; Strong balance sheet supports growth investments",
+    "bear_case": "Execution risk on large order book; Policy-dependent revenue streams; Competition from new entrants in Kavach; Raw material price volatility; Working capital intensive operations; Telecom segment structural decline",
+    "key_catalysts": [
+      "Indian Railways Kavach rollout acceleration across 34,000+ km network",
+      "Defence battery orders for submarines and missile systems",
+      "Lithium-ion battery scale-up for energy storage applications",
+      "Export market expansion in Middle East and European markets"
+    ],
+    "key_risks": [
+      "Execution delays on current \u20b92,999 cr order book",
+      "Re-tendering risks in government contracts",
+      "New competition in railway signaling systems",
+      "Raw material cost inflation impacting margins"
+    ],
+    "saarthi_scores": {
+      "S_sector_quality": 13.0,
+      "A_accounting_quality": 12.0,
+      "A_asset_quality": 11.0,
+      "R_revenue_visibility": 14.0,
+      "T_track_record": 8.0,
+      "H_balance_sheet_health": 13.0,
+      "I_intrinsic_valuation": 9.0
+    },
+    "saarthi_total": 80.0,
+    "saarthi_rating": "STRONG BUY"
+  },
+  "operational": {
+    "years": [
+      "FY21A",
+      "FY22A",
+      "FY23A",
+      "FY24A",
+      "FY25A",
+      "FY26E",
+      "FY27E",
+      "FY28E"
+    ],
+    "volume_segments": {
+      "Industrial Batteries (GWh)": [
+        2.1,
+        2.8,
+        3.2,
+        4.8,
+        4.2,
+        5.8,
+        6.5,
+        7.2
+      ],
+      "Defence Batteries (MWh)": [
+        180.0,
+        245.0,
+        285.0,
+        420.0,
+        385.0,
+        485.0,
+        562.0,
+        638.0
+      ],
+      "Railway Electronics (Units)": [
+        1200.0,
+        1850.0,
+        2100.0,
+        3250.0,
+        2850.0,
+        4200.0,
+        4850.0,
+        5500.0
+      ]
+    },
+    "capacity_utilisation_pct": [
+      58.0,
+      68.0,
+      72.0,
+      78.0,
+      65.0,
+      82.0,
+      85.0,
+      88.0
+    ],
+    "countries_of_operation": [
+      38.0,
+      42.0,
+      45.0,
+      48.0,
+      52.0,
+      55.0,
+      58.0,
+      62.0
+    ],
+    "plants_india": [
+      6.0,
+      6.0,
+      6.0,
+      6.0,
+      6.0,
+      7.0,
+      7.0,
+      8.0
+    ],
+    "plants_overseas": [
+      3.0,
+      3.0,
+      4.0,
+      4.0,
+      5.0,
+      5.0,
+      6.0,
+      6.0
+    ],
+    "revenue_mix_pct": {
+      "Industrial Batteries": 0.71,
+      "Defence & Aviation": 0.18,
+      "Electronics": 0.11
+    },
+    "geography_mix_pct": {
+      "India": 0.72,
+      "Middle East": 0.15,
+      "Europe": 0.08,
+      "Others": 0.05
+    },
+    "realization_per_mt": 285000.0,
+    "employees": 2152.0
+  },
+  "governance": {
+    "board": [
+      {
+        "name": "Dr A J Prasad",
+        "designation": "Chairman & MD",
+        "status": "Promoter Executive",
+        "din": "00064524",
+        "since": "1986"
+      },
+      {
+        "name": "S Narsing Rao",
+        "designation": "Independent Director",
+        "status": "Independent",
+        "din": "00163889",
+        "since": "2014"
+      },
+      {
+        "name": "Karipineni Venkata Sriram",
+        "designation": "Independent Director",
+        "status": "Independent",
+        "din": "00165465",
+        "since": "2015"
+      },
+      {
+        "name": "Richa Datta",
+        "designation": "Independent Director",
+        "status": "Independent",
+        "din": "07599764",
+        "since": "2018"
+      },
+      {
+        "name": "Aparna Surabhi",
+        "designation": "Independent Director",
+        "status": "Independent",
+        "din": "08435692",
+        "since": "2020"
+      },
+      {
+        "name": "Deeksha Mikkilineni",
+        "designation": "Non-Executive Director",
+        "status": "Nominee",
+        "din": "09354821",
+        "since": "2022"
+      }
+    ],
+    "shareholding": {
+      "years": [
+        "FY22",
+        "FY23",
+        "FY24",
+        "FY25"
+      ],
+      "promoter_pct": [
+        0.598,
+        0.596,
+        0.594,
+        0.591
+      ],
+      "fii_pct": [
+        0.088,
+        0.095,
+        0.108,
+        0.124
+      ],
+      "dii_pct": [
+        0.156,
+        0.168,
+        0.182,
+        0.195
+      ],
+      "public_pct": [
+        0.158,
+        0.141,
+        0.116,
+        0.09
+      ]
+    },
+    "promoter_pledge_pct": 0.0,
+    "board_size": 6.0,
+    "independent_directors": 4.0,
+    "women_directors": 2.0,
+    "statutory_auditor": "LNR Associates",
+    "managerial_remuneration_cr": 12.8,
+    "auditor_fees_audit_cr": 0.85,
+    "auditor_fees_non_audit_cr": 0.15,
+    "related_party_transactions_cr": 2.45
+  },
+  "timeline_events": [
+    {
+      "year": "1977",
+      "category": "Founding",
+      "description": "HBL Power Systems founded by Dr A J Prasad",
+      "impact": "Company establishment"
+    },
+    {
+      "year": "1995",
+      "category": "IPO",
+      "description": "Listed on BSE and NSE",
+      "impact": "Public listing for growth capital"
+    },
+    {
+      "year": "2005",
+      "category": "Expansion",
+      "description": "International expansion to Middle East",
+      "impact": "Geographic diversification"
+    },
+    {
+      "year": "2010",
+      "category": "New Vertical",
+      "description": "Entry into defence electronics",
+      "impact": "Product portfolio diversification"
+    },
+    {
+      "year": "2018",
+      "category": "Regulatory",
+      "description": "First TCAS system approval from RDSO",
+      "impact": "Railway electronics business launch"
+    },
+    {
+      "year": "2022",
+      "category": "Strategy",
+      "description": "Focus shift from telecom to defence/railways",
+      "impact": "Margin improvement strategy"
+    },
+    {
+      "year": "2024",
+      "category": "Milestone",
+      "description": "Kavach Version 4.0 RDSO approval",
+      "impact": "First-mover advantage in ATP systems"
+    },
+    {
+      "year": "2025",
+      "category": "Expansion",
+      "description": "\u20b92,999 cr order book achievement",
+      "impact": "Strong revenue visibility"
+    },
+    {
+      "year": "2026E",
+      "category": "Outlook",
+      "description": "Lithium-ion battery scale-up",
+      "impact": "Energy storage market entry"
+    },
+    {
+      "year": "2027E",
+      "category": "Outlook",
+      "description": "Export expansion to Europe",
+      "impact": "Geographic revenue growth"
+    },
+    {
+      "year": "2028E",
+      "category": "Outlook",
+      "description": "Defence battery leadership",
+      "impact": "Submarine & missile battery dominance"
+    },
+    {
+      "year": "2030E",
+      "category": "Outlook",
+      "description": "\u20b910,000 cr revenue target",
+      "impact": "Scale achievement milestone"
+    }
+  ],
+  "risk_items": [
+    {
+      "category": "Execution",
+      "factor": "Order book delivery capacity",
+      "description": "Current \u20b92,999 cr order book requires execution over 18-24 months with throughput constraints.",
+      "mitigation": "Capacity expansion and vendor partnerships",
+      "probability": "M",
+      "impact": "H",
+      "rating": "HIGH"
+    },
+    {
+      "category": "Regulatory",
+      "factor": "Policy dependency",
+      "description": "Heavy reliance on government railway and defence spending decisions.",
+      "mitigation": "Product diversification and export growth",
+      "probability": "M",
+      "impact": "H",
+      "rating": "HIGH"
+    },
+    {
+      "category": "Competition",
+      "factor": "New market entrants",
+      "description": "Kavach market attracting new competitors as market grows.",
+      "mitigation": "Technology leadership and patent protection",
+      "probability": "H",
+      "impact": "M",
+      "rating": "MEDIUM"
+    },
+    {
+      "category": "Raw Material",
+      "factor": "Cost inflation",
+      "description": "Lead, lithium and other raw material price volatility affecting margins.",
+      "mitigation": "Long-term contracts and hedging strategies",
+      "probability": "H",
+      "impact": "M",
+      "rating": "MEDIUM"
+    },
+    {
+      "category": "Market",
+      "factor": "Telecom segment decline",
+      "description": "Structural shift from VRLA to lithium in telecom reducing traditional revenues.",
+      "mitigation": "Lithium battery capability development",
+      "probability": "H",
+      "impact": "M",
+      "rating": "MEDIUM"
+    },
+    {
+      "category": "Working Capital",
+      "factor": "Cash flow timing",
+      "description": "Large projects require significant working capital with payment delays.",
+      "mitigation": "Strong balance sheet and credit facilities",
+      "probability": "M",
+      "impact": "M",
+      "rating": "MEDIUM"
+    },
+    {
+      "category": "Technology",
+      "factor": "Obsolescence risk",
+      "description": "Rapid technology changes in battery and electronics sectors.",
+      "mitigation": "Continuous R&D investment",
+      "probability": "M",
+      "impact": "M",
+      "rating": "MEDIUM"
+    },
+    {
+      "category": "Currency",
+      "factor": "Export exposure",
+      "description": "40% export revenues exposed to currency fluctuation risks.",
+      "mitigation": "Natural hedging and forex contracts",
+      "probability": "M",
+      "impact": "L",
+      "rating": "LOW"
+    }
+  ],
+  "peers_detailed": [
+    {
+      "name": "EXIDEIND",
+      "revenue_series": [
+        10450.0,
+        12850.0,
+        14250.0,
+        15680.0,
+        16420.0
+      ],
+      "ebitda_margin_series": [
+        0.098,
+        0.125,
+        0.142,
+        0.148,
+        0.142
+      ],
+      "pat_series": [
+        485.0,
+        658.0,
+        825.0,
+        985.0,
+        1045.0
+      ],
+      "mcap_cr": 12850.0,
+      "pe": 18.5,
+      "pb": 2.8,
+      "roce_pct": 18.2,
+      "roe_pct": 15.8
+    },
+    {
+      "name": "AMARAJABAT",
+      "revenue_series": [
+        6850.0,
+        8420.0,
+        9650.0,
+        11250.0,
+        12180.0
+      ],
+      "ebitda_margin_series": [
+        0.128,
+        0.145,
+        0.168,
+        0.172,
+        0.168
+      ],
+      "pat_series": [
+        385.0,
+        528.0,
+        698.0,
+        845.0,
+        892.0
+      ],
+      "mcap_cr": 18920.0,
+      "pe": 22.4,
+      "pb": 3.2,
+      "roce_pct": 21.5,
+      "roe_pct": 18.2
+    },
+    {
+      "name": "POLYCAB",
+      "revenue_series": [
+        8950.0,
+        10850.0,
+        12450.0,
+        14250.0,
+        15680.0
+      ],
+      "ebitda_margin_series": [
+        0.095,
+        0.108,
+        0.125,
+        0.128,
+        0.125
+      ],
+      "pat_series": [
+        485.0,
+        658.0,
+        825.0,
+        985.0,
+        1142.0
+      ],
+      "mcap_cr": 85420.0,
+      "pe": 28.6,
+      "pb": 4.8,
+      "roce_pct": 24.8,
+      "roe_pct": 22.1
+    },
+    {
+      "name": "BOSCHLTD",
+      "revenue_series": [
+        12450.0,
+        13850.0,
+        15250.0,
+        16850.0,
+        18250.0
+      ],
+      "ebitda_margin_series": [
+        0.088,
+        0.095,
+        0.108,
+        0.118,
+        0.118
+      ],
+      "pat_series": [
+        685.0,
+        785.0,
+        925.0,
+        1085.0,
+        1245.0
+      ],
+      "mcap_cr": 52850.0,
+      "pe": 35.2,
+      "pb": 6.8,
+      "roce_pct": 22.5,
+      "roe_pct": 19.5
+    }
+  ]
+}

@@ -153,7 +153,7 @@ export async function updatePipelineOutput(
     'sector_playbook_original' | 'sector_playbook_approved' |
     'condensed_briefing' | 'thesis_original' | 'thesis_approved' |
     'final_report_raw' | 'final_report_approved' |
-    'vault_folder_id' | 'vault_folder_url' | 'financial_model_file_url'
+    'vault_folder_id' | 'vault_folder_url' | 'financial_model_file_url' | 'financial_model_json_url'
   >>
 ): Promise<PipelineSession> {
   const { data, error } = await supabase

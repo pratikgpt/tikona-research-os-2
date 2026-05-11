@@ -89,7 +89,7 @@ export async function generateFinancialModel(
 
 export async function mirrorFinancialModelToStorage(
   ticker: string
-): Promise<{ fileUrl: string; filePath: string | null }> {
+): Promise<{ fileUrl: string; filePath: string | null; jsonFileUrl: string | null; jsonFilePath: string | null }> {
   const response = await fetch(`${FINANCIAL_MODEL_SERVICE_URL}/storage/${ticker.toUpperCase()}`, {
     method: 'POST',
   });
@@ -104,6 +104,8 @@ export async function mirrorFinancialModelToStorage(
     message?: string | null;
     storage_url?: string | null;
     storage_path?: string | null;
+    json_storage_url?: string | null;
+    json_storage_path?: string | null;
   };
 
   if (data.status !== 'success' || !data.storage_url) {
@@ -113,6 +115,8 @@ export async function mirrorFinancialModelToStorage(
   return {
     fileUrl: data.storage_url,
     filePath: data.storage_path ?? null,
+    jsonFileUrl: data.json_storage_url ?? null,
+    jsonFilePath: data.json_storage_path ?? null,
   };
 }
 
@@ -1065,4 +1069,3 @@ export async function generatePptx(
 
   return (await response.json()) as GeneratePptxResult;
 }
-

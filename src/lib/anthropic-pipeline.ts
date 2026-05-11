@@ -126,6 +126,10 @@ interface AnthropicResult {
   citations: string[];
 }
 
+interface FinancialModelPromptContext {
+  contextText: string;
+}
+
 async function callAnthropicWithSearch(options: AnthropicCallOptions): Promise<AnthropicResult> {
   const client = getClient();
   const {
@@ -186,6 +190,69 @@ async function callAnthropicWithSearch(options: AnthropicCallOptions): Promise<A
   console.groupEnd();
 
   return { text, tokensUsed, citations: [...new Set(citations)] };
+}
+
+async function getFinancialModelPromptContext(sessionId?: string): Promise<FinancialModelPromptContext> {
+  if (!sessionId) return { contextText: '' };
+
+  const { data } = await supabase
+    .from('research_sessions')
+    .select('financial_model_json_url')
+    .eq('session_id', sessionId)
+    .maybeSingle();
+
+  const jsonUrl = (data as { financial_model_json_url?: string | null } | null)?.financial_model_json_url;
+  if (!jsonUrl) return { contextText: '' };
+
+  try {
+    const response = await fetch(jsonUrl, { signal: AbortSignal.timeout(15000) });
+    if (!response.ok) {
+      console.warn('[Pipeline] Financial model JSON fetch failed:', response.status);
+      return { contextText: '' };
+    }
+
+    const model = (await response.json()) as Record<string, unknown>;
+    const assumptions = (model.assumptions as Record<string, unknown> | undefined) ?? {};
+    const valuation = (model.valuation as Record<string, unknown> | undefined) ?? {};
+    const thesis = (model.thesis as Record<string, unknown> | undefined) ?? {};
+    const peers = Array.isArray(model.peers) ? model.peers.slice(0, 6) : [];
+    const projectionYears = Array.isArray(assumptions.projection_years) ? assumptions.projection_years.join(', ') : 'N/A';
+
+    return {
+      contextText: `
+## Financial Model Snapshot
+- Base Year: ${String(model.base_year ?? 'N/A')}
+- Projection Years: ${projectionYears}
+- CMP: ${String(model.cmp ?? 'N/A')}
+- Target Price: ${String(model.target_price ?? 'N/A')}
+- Rating: ${String(model.rating ?? 'N/A')}
+- Upside %: ${String(model.upside_pct ?? 'N/A')}
+- SAARTHI: ${String(thesis.saarthi_total ?? 'N/A')} / 100 (${String(thesis.saarthi_rating ?? 'N/A')})
+- FM Thesis: ${String(thesis.investment_thesis ?? '')}
+- Bull Case: ${String(thesis.bull_case ?? '')}
+- Bear Case: ${String(thesis.bear_case ?? '')}
+- Key Catalysts: ${Array.isArray(thesis.key_catalysts) ? thesis.key_catalysts.join('; ') : 'N/A'}
+- Key Risks: ${Array.isArray(thesis.key_risks) ? thesis.key_risks.join('; ') : 'N/A'}
+- Revenue Growth Assumptions: ${JSON.stringify(assumptions.revenue_growth_pct ?? {})}
+- Receivable Days Assumptions: ${JSON.stringify(assumptions.receivable_days ?? {})}
+- Inventory Days Assumptions: ${JSON.stringify(assumptions.inventory_days ?? {})}
+- Valuation Anchors: ${JSON.stringify({
+        dcf_fair_value: valuation.dcf_fair_value ?? null,
+        pe_fair_value: valuation.pe_fair_value ?? null,
+        ev_ebitda_fair_value: valuation.ev_ebitda_fair_value ?? null,
+        blended_fair_value: valuation.blended_fair_value ?? null,
+        target_pe: assumptions.target_pe ?? null,
+        target_ev_ebitda: assumptions.target_ev_ebitda ?? null,
+      })}
+- Peer Set: ${JSON.stringify(peers)}
+
+Use this financial-model snapshot as an analyst-produced structured input. Keep Stage 1/2 outputs consistent with it unless fresher evidence from vault docs or web search clearly contradicts it, and call out contradictions explicitly.
+`.trim(),
+    };
+  } catch (error) {
+    console.warn('[Pipeline] Financial model JSON unavailable:', error);
+    return { contextText: '' };
+  }
 }
 
 // ========================
@@ -946,6 +1013,7 @@ export async function runStage1(
 
   const financialContext = formatFinancialContext(financials);
   const vaultBriefing = sessionId ? await getCachedVaultBriefing(sessionId) : '';
+  const financialModelContext = await getFinancialModelPromptContext(sessionId);
 
   onProgress?.({ stage: 'stage1', step: 'generating', message: 'Generating investment thesis via Anthropic + web search...', percent: 15 });
 
@@ -958,7 +1026,7 @@ export async function runStage1(
 ## Sector Framework (summary):
 ${sectorFrameworkMarkdown.slice(0, 4000)}
 
-${financialContext}${vaultBriefing ? `\n\n${vaultBriefing.slice(0, 8000)}\n\n*Use the Vault Briefing above as a primary source — these are the company's own filings + presentations. Cross-check web_search results against these.*` : ''}`;
+${financialContext}${financialModelContext.contextText ? `\n\n${financialModelContext.contextText}` : ''}${vaultBriefing ? `\n\n${vaultBriefing.slice(0, 8000)}\n\n*Use the Vault Briefing above as a primary source — these are the company's own filings + presentations. Cross-check web_search results against these.*` : ''}`;
 
   // User prompt — context + instructions
   let instructions = promptOverrides?.userPrompt || DEFAULT_PROMPTS.stage1.user;
@@ -1028,6 +1096,7 @@ export async function runStage2(
 ): Promise<{ sections: Array<{ key: string; title: string; content: string }>; tokensUsed: number }> {
   const financialContext = formatFinancialContext(financials);
   const vaultBriefing = sessionId ? await getCachedVaultBriefing(sessionId) : '';
+  const financialModelContext = await getFinancialModelPromptContext(sessionId);
 
   onProgress?.({ stage: 'stage2', step: 'generating', message: 'Generating full report via Anthropic + web search...', percent: 10 });
 
@@ -1042,7 +1111,7 @@ ${thesis.slice(0, 4000)}
 ## Sector Framework:
 ${sectorFrameworkMarkdown.slice(0, 3000)}
 
-${financialContext}${vaultBriefing ? `\n\n${vaultBriefing.slice(0, 8000)}\n\n*Use the Vault Briefing as primary source for company-specific facts (figures, guidance, capex) — it comes from official filings and presentations.*` : ''}`;
+${financialContext}${financialModelContext.contextText ? `\n\n${financialModelContext.contextText}` : ''}${vaultBriefing ? `\n\n${vaultBriefing.slice(0, 8000)}\n\n*Use the Vault Briefing as primary source for company-specific facts (figures, guidance, capex) — it comes from official filings and presentations.*` : ''}`;
 
   let instructions = promptOverrides?.userPrompt || DEFAULT_PROMPTS.stage2.user;
   instructions = instructions

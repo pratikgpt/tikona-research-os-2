@@ -1,7 +1,7 @@
 """
 Financial Model API Server
 ===========================
-Deploy this on your VPS alongside financial_model_v3.py.
+Deploy this on your VPS alongside financial_model_v5.py.
 Exposes a single POST endpoint that n8n (or your frontend) calls.
 
 Usage:
@@ -9,6 +9,12 @@ Usage:
   ANTHROPIC_API_KEY="sk-ant-..." python3 financial_model_server.py
 
 The server runs on port 8500 by default.
+
+Deployment setup (one-time, as root):
+  sudo mkdir -p /var/lib/financial_models
+  sudo chown <deploy-user> /var/lib/financial_models
+  # Optional: prevent systemd-tmpfiles from clearing it
+  echo "x /var/lib/financial_models" | sudo tee /etc/tmpfiles.d/financial_models.conf
 """
 
 import os
@@ -16,7 +22,6 @@ import sys
 import uuid
 import time
 import traceback
-from pathlib import Path
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -25,12 +30,18 @@ import uvicorn
 
 # ── Make sure financial_model_v3 is importable from the same directory ──
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from financial_model_v5 import __version__ as FM_VERSION
 
 app = FastAPI(title="Financial Model Generator", version="1.0")
 
 # Output directory for generated models
-OUTPUT_DIR = os.environ.get("MODEL_OUTPUT_DIR", "/tmp/financial_models")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+OUTPUT_DIR = os.environ.get("MODEL_OUTPUT_DIR", "/var/lib/financial_models")
+try:
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+except PermissionError as e:
+    raise RuntimeError(
+        f"Cannot create {OUTPUT_DIR}. Run: sudo mkdir -p {OUTPUT_DIR} && sudo chown $(whoami) {OUTPUT_DIR}"
+    ) from e
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 MODEL_STORAGE_BUCKET = os.environ.get("SUPABASE_FINANCIAL_MODEL_BUCKET", "research-reports-html")
@@ -56,6 +67,8 @@ class GenerateResponse(BaseModel):
     file_path: str | None = None
     storage_path: str | None = None
     storage_url: str | None = None
+    json_storage_path: str | None = None
+    json_storage_url: str | None = None
     message: str | None = None
     duration_seconds: int | None = None
 
@@ -67,6 +80,8 @@ class JobStatus(BaseModel):
     file_path: str | None = None
     storage_path: str | None = None
     storage_url: str | None = None
+    json_storage_path: str | None = None
+    json_storage_url: str | None = None
     message: str | None = None
     duration_seconds: int | None = None
 
@@ -77,6 +92,8 @@ class StorageMirrorResponse(BaseModel):
     file_path: str | None = None
     storage_path: str | None = None
     storage_url: str | None = None
+    json_storage_path: str | None = None
+    json_storage_url: str | None = None
     message: str | None = None
 
 
@@ -88,7 +105,7 @@ class StorageMirrorResponse(BaseModel):
 def health():
     return {
         "status": "ok",
-        "model_version": "v5",
+        "model_version": FM_VERSION,
         "anthropic_key_set": bool(os.environ.get("ANTHROPIC_API_KEY")),
         "screener_creds_set": bool(os.environ.get("SCREENER_USERNAME") and os.environ.get("SCREENER_PASSWORD")),
         "output_dir": OUTPUT_DIR,
@@ -99,7 +116,7 @@ def _storage_public_url(path: str) -> str:
     return f"{SUPABASE_URL}/storage/v1/object/public/{MODEL_STORAGE_BUCKET}/{path}"
 
 
-def upload_model_to_supabase(file_path: str, ticker: str) -> tuple[str, str]:
+def upload_model_to_supabase(file_path: str, ticker: str) -> dict[str, str | None]:
     """Upload the v5 xlsx and (when present) the .json sidecar produced by
     financial_model_v5.generate_financial_model. The html-report pipeline
     prefers the JSON sidecar because the xlsx is formula-only and openpyxl
@@ -127,6 +144,8 @@ def upload_model_to_supabase(file_path: str, ticker: str) -> tuple[str, str]:
 
     # Also upload the JSON sidecar if it exists alongside the xlsx
     json_local = os.path.splitext(file_path)[0] + ".json"
+    json_path = None
+    json_public_url = None
     if os.path.exists(json_local):
         json_path = f"financial-models/{ticker_u}/{ticker_u}_model.json"
         json_url = f"{SUPABASE_URL}/storage/v1/object/{MODEL_STORAGE_BUCKET}/{json_path}"
@@ -138,15 +157,20 @@ def upload_model_to_supabase(file_path: str, ticker: str) -> tuple[str, str]:
             with open(json_local, "rb") as f:
                 jr = requests.put(json_url, data=f, headers=json_headers, timeout=60)
             if jr.status_code >= 400:
-                print(f"  WARN: JSON sidecar upload returned {jr.status_code}: {jr.text[:200]}")
-            else:
-                print(f"  Uploaded JSON sidecar -> {json_path}")
+                raise RuntimeError(f"JSON sidecar upload failed: {jr.status_code} {jr.text[:200]}")
+            print(f"  Uploaded JSON sidecar -> {json_path}")
+            json_public_url = _storage_public_url(json_path)
         except Exception as e:  # noqa: BLE001
-            print(f"  WARN: JSON sidecar upload failed ({type(e).__name__}: {e})")
+            raise RuntimeError(f"JSON sidecar upload failed ({type(e).__name__}: {e})") from e
     else:
         print(f"  NOTE: no JSON sidecar at {json_local}; html pipeline will fall back to CSV/xlsx")
 
-    return path, _storage_public_url(path)
+    return {
+        "storage_path": path,
+        "storage_url": _storage_public_url(path),
+        "json_storage_path": json_path,
+        "json_storage_url": json_public_url,
+    }
 
 
 # ========================
@@ -201,19 +225,16 @@ def generate_sync(req: GenerateRequest):
             import shutil
             shutil.copy2(json_src, final_json)
 
-        storage_path = None
-        storage_url = None
-        try:
-            storage_path, storage_url = upload_model_to_supabase(file_path, ticker)
-        except Exception:
-            traceback.print_exc()
+        storage_result = upload_model_to_supabase(file_path, ticker)
 
         return GenerateResponse(
             status="success",
             file_name=f"{ticker}_model.xlsx",
             file_path=file_path,
-            storage_path=storage_path,
-            storage_url=storage_url,
+            storage_path=storage_result["storage_path"],
+            storage_url=storage_result["storage_url"],
+            json_storage_path=storage_result["json_storage_path"],
+            json_storage_url=storage_result["json_storage_url"],
             duration_seconds=int(time.time() - start),
             message=(
                 f"rating={result.get('rating')} target={result.get('target_price')} "
@@ -260,6 +281,10 @@ def get_job_status(job_id: str):
         status=job["status"],
         file_name=job.get("file_name"),
         file_path=job.get("file_path"),
+        storage_path=job.get("storage_path"),
+        storage_url=job.get("storage_url"),
+        json_storage_path=job.get("json_storage_path"),
+        json_storage_url=job.get("json_storage_url"),
         message=job.get("message"),
         duration_seconds=job.get("duration_seconds"),
     )
@@ -292,19 +317,16 @@ def _run_generation(job_id: str, req: GenerateRequest):
             import shutil
             shutil.copy2(json_src, final_json)
 
-        storage_path = None
-        storage_url = None
-        try:
-            storage_path, storage_url = upload_model_to_supabase(file_path, ticker)
-        except Exception:
-            traceback.print_exc()
+        storage_result = upload_model_to_supabase(file_path, ticker)
 
         jobs[job_id] = {
             "status": "completed",
             "file_name": f"{ticker}_model.xlsx",
             "file_path": file_path,
-            "storage_path": storage_path,
-            "storage_url": storage_url,
+            "storage_path": storage_result["storage_path"],
+            "storage_url": storage_result["storage_url"],
+            "json_storage_path": storage_result["json_storage_path"],
+            "json_storage_url": storage_result["json_storage_url"],
             "duration_seconds": int(time.time() - start),
             "rating": result.get("rating"),
             "target_price": result.get("target_price"),
@@ -353,13 +375,15 @@ def mirror_model_to_storage(ticker: str):
         )
 
     try:
-        storage_path, storage_url = upload_model_to_supabase(file_path, ticker)
+        storage_result = upload_model_to_supabase(file_path, ticker)
         return StorageMirrorResponse(
             status="success",
             file_name=f"{ticker}_model.xlsx",
             file_path=file_path,
-            storage_path=storage_path,
-            storage_url=storage_url,
+            storage_path=storage_result["storage_path"],
+            storage_url=storage_result["storage_url"],
+            json_storage_path=storage_result["json_storage_path"],
+            json_storage_url=storage_result["json_storage_url"],
         )
     except Exception as e:
         traceback.print_exc()

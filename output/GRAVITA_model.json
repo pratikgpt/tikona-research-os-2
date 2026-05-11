@@ -1,0 +1,887 @@
+{
+  "sector": "Metal & Metal Products",
+  "base_year": "FY26",
+  "cmp": 1777.0,
+  "target_price": 2380.0,
+  "rating": "BUY",
+  "upside_pct": 33.9,
+  "shares_cr": 7.38,
+  "assumptions": {
+    "projection_years": [
+      "FY27E",
+      "FY28E",
+      "FY29E",
+      "FY30E",
+      "FY31E"
+    ],
+    "revenue_growth_pct": {
+      "FY27E": 16.5,
+      "FY28E": 22.0,
+      "FY29E": 18.5,
+      "FY30E": 15.2,
+      "FY31E": 12.8
+    },
+    "rm_pct": {
+      "FY27E": 83.2,
+      "FY28E": 82.5,
+      "FY29E": 81.8,
+      "FY30E": 81.2,
+      "FY31E": 80.8
+    },
+    "employee_pct": {
+      "FY27E": 4.1,
+      "FY28E": 3.9,
+      "FY29E": 3.8,
+      "FY30E": 3.7,
+      "FY31E": 3.6
+    },
+    "power_fuel_pct": {
+      "FY27E": 0.9,
+      "FY28E": 0.8,
+      "FY29E": 0.8,
+      "FY30E": 0.8,
+      "FY31E": 0.7
+    },
+    "other_mfg_pct": {
+      "FY27E": 2.1,
+      "FY28E": 2.0,
+      "FY29E": 1.9,
+      "FY30E": 1.8,
+      "FY31E": 1.8
+    },
+    "selling_admin_pct": {
+      "FY27E": 1.0,
+      "FY28E": 1.0,
+      "FY29E": 1.0,
+      "FY30E": 1.0,
+      "FY31E": 1.0
+    },
+    "other_exp_pct": {
+      "FY27E": 1.2,
+      "FY28E": 1.1,
+      "FY29E": 1.0,
+      "FY30E": 0.9,
+      "FY31E": 0.9
+    },
+    "chg_inventory_pct": {
+      "FY27E": 3.8,
+      "FY28E": 4.2,
+      "FY29E": 3.5,
+      "FY30E": 3.2,
+      "FY31E": 2.8
+    },
+    "depreciation_cr": {
+      "FY27E": 58.0,
+      "FY28E": 78.0,
+      "FY29E": 105.0,
+      "FY30E": 128.0,
+      "FY31E": 148.0
+    },
+    "interest_cr": {
+      "FY27E": 32.0,
+      "FY28E": 45.0,
+      "FY29E": 52.0,
+      "FY30E": 58.0,
+      "FY31E": 62.0
+    },
+    "other_income_cr": {
+      "FY27E": 95.0,
+      "FY28E": 118.0,
+      "FY29E": 142.0,
+      "FY30E": 165.0,
+      "FY31E": 185.0
+    },
+    "tax_rate_pct": {
+      "FY27E": 15.8,
+      "FY28E": 16.2,
+      "FY29E": 16.5,
+      "FY30E": 17.0,
+      "FY31E": 17.5
+    },
+    "capex_cr": {
+      "FY27E": 385.0,
+      "FY28E": 630.0,
+      "FY29E": 450.0,
+      "FY30E": 320.0,
+      "FY31E": 280.0
+    },
+    "receivable_days": {
+      "FY27E": 35.0,
+      "FY28E": 33.0,
+      "FY29E": 32.0,
+      "FY30E": 31.0,
+      "FY31E": 30.0
+    },
+    "inventory_days": {
+      "FY27E": 82.0,
+      "FY28E": 78.0,
+      "FY29E": 75.0,
+      "FY30E": 72.0,
+      "FY31E": 70.0
+    },
+    "dividend_payout_pct": 15.0,
+    "target_pe": 28.5,
+    "target_ev_ebitda": 18.2,
+    "wacc_pct": 11.8,
+    "terminal_growth_pct": 4.2,
+    "rationale": "Growth driven by 7 lakh MTPA capacity by FY28, new verticals (lithium-ion, rubber, copper), improving domestic scrap availability, and rising non-lead contribution to 30% by FY29. Management targets 25%+ volume CAGR and 35%+ profit growth backed by Rs1,225cr capex."
+  },
+  "projections": {
+    "years": [
+      "FY27E",
+      "FY28E",
+      "FY29E",
+      "FY30E",
+      "FY31E"
+    ],
+    "net_block": [
+      1285.0,
+      1840.0,
+      2185.0,
+      2377.0,
+      2509.0
+    ],
+    "cwip": [
+      62.0,
+      85.0,
+      95.0,
+      72.0,
+      58.0
+    ],
+    "investments": [
+      450.0,
+      520.0,
+      610.0,
+      725.0,
+      820.0
+    ],
+    "other_assets": [
+      2580.0,
+      3420.0,
+      4280.0,
+      5050.0,
+      5720.0
+    ],
+    "share_capital": [
+      15.0,
+      15.0,
+      15.0,
+      15.0,
+      15.0
+    ],
+    "reserves": [
+      2858.0,
+      3485.0,
+      4295.0,
+      5187.0,
+      6145.0
+    ],
+    "borrowings": [
+      920.0,
+      1285.0,
+      1450.0,
+      1520.0,
+      1580.0
+    ],
+    "other_liabilities": [
+      285.0,
+      365.0,
+      425.0,
+      485.0,
+      535.0
+    ],
+    "cfo": [
+      485.0,
+      625.0,
+      785.0,
+      920.0,
+      1048.0
+    ],
+    "cfi": [
+      -365.0,
+      -612.0,
+      -435.0,
+      -308.0,
+      -268.0
+    ],
+    "cff": [
+      125.0,
+      215.0,
+      -85.0,
+      -125.0,
+      -165.0
+    ]
+  },
+  "historical_ratios": {
+    "years": [
+      "FY21",
+      "FY22",
+      "FY23",
+      "FY24",
+      "FY25",
+      "FY26"
+    ],
+    "ebitda_margin_pct": [
+      8.6,
+      9.8,
+      7.4,
+      9.1,
+      8.5,
+      10.2
+    ],
+    "pat_margin_pct": [
+      3.7,
+      6.3,
+      7.2,
+      7.6,
+      8.1,
+      8.9
+    ],
+    "roe_pct": [
+      20.6,
+      37.3,
+      35.2,
+      28.9,
+      15.1,
+      15.6
+    ],
+    "roce_pct": [
+      18.2,
+      28.5,
+      24.8,
+      22.1,
+      19.8,
+      21.2
+    ],
+    "debt_equity": [
+      0.98,
+      1.01,
+      0.6,
+      0.65,
+      0.14,
+      0.29
+    ],
+    "receivable_days": [
+      15.0,
+      18.0,
+      18.0,
+      31.0,
+      26.0,
+      37.0
+    ],
+    "inventory_days": [
+      93.0,
+      104.0,
+      94.0,
+      78.0,
+      58.0,
+      104.0
+    ],
+    "asset_turnover": [
+      1.94,
+      2.22,
+      2.32,
+      1.98,
+      1.54,
+      1.25
+    ],
+    "rm_pct": [
+      86.2,
+      81.2,
+      82.7,
+      81.4,
+      82.4,
+      84.2
+    ],
+    "employee_pct": [
+      5.2,
+      4.6,
+      4.8,
+      4.2,
+      4.1,
+      4.3
+    ],
+    "tax_rate_pct": [
+      19.9,
+      9.8,
+      10.3,
+      11.6,
+      13.9,
+      15.6
+    ]
+  },
+  "valuation": {
+    "dcf_fair_value": 2125.0,
+    "pe_fair_value": 2580.0,
+    "ev_ebitda_fair_value": 2430.0,
+    "blended_fair_value": 2380.0,
+    "sensitivity_pe": {
+      "row_label": "PE Multiple",
+      "col_label": "EPS Growth %",
+      "row_values": [
+        24.0,
+        26.5,
+        29.0,
+        31.5,
+        34.0
+      ],
+      "col_values": [
+        15.0,
+        20.0,
+        25.0,
+        30.0,
+        35.0
+      ],
+      "grid": [
+        [
+          1920.0,
+          2076.0,
+          2232.0,
+          2388.0,
+          2544.0
+        ],
+        [
+          2120.0,
+          2291.0,
+          2462.0,
+          2633.0,
+          2804.0
+        ],
+        [
+          2320.0,
+          2506.0,
+          2692.0,
+          2878.0,
+          3064.0
+        ],
+        [
+          2520.0,
+          2721.0,
+          2922.0,
+          3123.0,
+          3324.0
+        ],
+        [
+          2720.0,
+          2936.0,
+          3152.0,
+          3368.0,
+          3584.0
+        ]
+      ]
+    }
+  },
+  "peers": [
+    {
+      "name": "Pondy Oxides & Chemicals",
+      "mcap_cr": 890.0,
+      "pe": 15.8,
+      "ev_ebitda": 12.2,
+      "ebitda_margin_pct": "11.5",
+      "roe_pct": 18.2
+    },
+    {
+      "name": "Exide Industries",
+      "mcap_cr": 28500.0,
+      "pe": 28.5,
+      "ev_ebitda": 16.8,
+      "ebitda_margin_pct": "8.2",
+      "roe_pct": 14.8
+    },
+    {
+      "name": "Nile Ltd",
+      "mcap_cr": 185.0,
+      "pe": 12.4,
+      "ev_ebitda": 9.8,
+      "ebitda_margin_pct": "7.8",
+      "roe_pct": 16.5
+    },
+    {
+      "name": "Eco Recycling",
+      "mcap_cr": 125.0,
+      "pe": 18.6,
+      "ev_ebitda": 14.2,
+      "ebitda_margin_pct": "12.8",
+      "roe_pct": 22.1
+    }
+  ],
+  "thesis": {
+    "investment_thesis": "Gravita is poised to benefit from India's circular economy push and regulatory tailwinds in battery recycling. The company's capacity doubling to 7 lakh MTPA by FY28, diversification into lithium-ion and rubber recycling, and improving domestic scrap availability provide strong growth visibility. Management's Vision 2029 targets 25%+ volume CAGR with expanding non-lead contribution create multiple re-rating catalysts.",
+    "bull_case": "Capacity expansion execution drives 20%+ revenue CAGR; New verticals (lithium-ion, rubber, copper) achieve targeted margins; Domestic scrap availability improves to 60%+ reducing working capital; Non-lead contribution reaches 30% with higher margins; Global expansion accelerates with strategic acquisitions",
+    "bear_case": "Capacity expansion delays due to regulatory approvals; Commodity price volatility impacts margins; Competition intensifies in lead recycling; New vertical ramp-up slower than expected; Global economic slowdown affects scrap availability",
+    "key_catalysts": [
+      "Completion of 1.25 lakh MTPA lead capacity by Q4 FY26",
+      "Lithium-ion battery recycling plant commissioning at Mundra",
+      "Copper recycling plant setup at Mandvi, Gujarat (29,400 MTPA)",
+      "RMIL acquisition synergies and integration completion"
+    ],
+    "key_risks": [
+      "Regulatory delays in capacity expansion approvals",
+      "Raw material scrap availability fluctuations",
+      "Commodity price volatility affecting margins",
+      "New vertical execution and scaling risks"
+    ],
+    "saarthi_scores": {
+      "S_sector_quality": 12.0,
+      "A_accounting_quality": 12.0,
+      "A_asset_quality": 11.0,
+      "R_revenue_visibility": 13.0,
+      "T_track_record": 8.0,
+      "H_balance_sheet_health": 13.0,
+      "I_intrinsic_valuation": 9.0
+    },
+    "saarthi_total": 78.0,
+    "saarthi_rating": "BUY"
+  },
+  "operational": {
+    "years": [
+      "FY21A",
+      "FY22A",
+      "FY23A",
+      "FY24A",
+      "FY25A",
+      "FY26A",
+      "FY27E",
+      "FY28E"
+    ],
+    "volume_segments": {
+      "Lead Recycling": [
+        88000.0,
+        135000.0,
+        168000.0,
+        195000.0,
+        235000.0,
+        248000.0,
+        295000.0,
+        385000.0
+      ],
+      "Aluminum Recycling": [
+        12500.0,
+        18000.0,
+        22000.0,
+        26500.0,
+        31500.0,
+        29800.0,
+        38000.0,
+        52000.0
+      ],
+      "Plastic Recycling": [
+        8200.0,
+        11500.0,
+        14200.0,
+        16800.0,
+        19500.0,
+        18700.0,
+        24000.0,
+        32000.0
+      ]
+    },
+    "capacity_utilisation_pct": [
+      62.0,
+      72.0,
+      78.0,
+      75.0,
+      80.0,
+      73.0,
+      84.0,
+      87.0
+    ],
+    "countries_of_operation": [
+      18.0,
+      22.0,
+      26.0,
+      28.0,
+      32.0,
+      34.0,
+      38.0,
+      42.0
+    ],
+    "plants_india": [
+      4.0,
+      5.0,
+      6.0,
+      7.0,
+      8.0,
+      9.0,
+      10.0,
+      12.0
+    ],
+    "plants_overseas": [
+      3.0,
+      4.0,
+      5.0,
+      6.0,
+      7.0,
+      8.0,
+      9.0,
+      11.0
+    ],
+    "revenue_mix_pct": {
+      "Lead": 0.72,
+      "Aluminum": 0.18,
+      "Plastic": 0.08,
+      "Others": 0.02
+    },
+    "geography_mix_pct": {
+      "India": 0.62,
+      "Europe": 0.18,
+      "Asia Pacific": 0.12,
+      "Others": 0.08
+    },
+    "realization_per_mt": 172500.0,
+    "employees": 1850.0
+  },
+  "governance": {
+    "board": [
+      {
+        "name": "Mahavir Prasad Agarwal",
+        "designation": "Chairman & Managing Director",
+        "status": "Promoter Executive",
+        "din": "00221469",
+        "since": "1992"
+      },
+      {
+        "name": "Rajat Agarwal",
+        "designation": "Managing Director",
+        "status": "Promoter Executive",
+        "din": "00920071",
+        "since": "2001"
+      },
+      {
+        "name": "Yogesh Malhotra",
+        "designation": "Whole Time Director & CEO",
+        "status": "Executive",
+        "din": "07018778",
+        "since": "2018"
+      },
+      {
+        "name": "Sunil Agarwal",
+        "designation": "Independent Director",
+        "status": "Independent",
+        "din": "00221460",
+        "since": "2010"
+      },
+      {
+        "name": "Tanvi Agarwal",
+        "designation": "Executive Director",
+        "status": "Promoter Executive",
+        "din": "07664470",
+        "since": "2020"
+      },
+      {
+        "name": "Deepika Agarwal",
+        "designation": "Independent Director",
+        "status": "Independent",
+        "din": "08764521",
+        "since": "2019"
+      }
+    ],
+    "shareholding": {
+      "years": [
+        "FY23",
+        "FY24",
+        "FY25",
+        "FY26"
+      ],
+      "promoter_pct": [
+        0.729,
+        0.681,
+        0.618,
+        0.559
+      ],
+      "fii_pct": [
+        0.085,
+        0.124,
+        0.158,
+        0.182
+      ],
+      "dii_pct": [
+        0.142,
+        0.156,
+        0.178,
+        0.195
+      ],
+      "public_pct": [
+        0.044,
+        0.039,
+        0.046,
+        0.064
+      ]
+    },
+    "promoter_pledge_pct": 0.0,
+    "board_size": 6.0,
+    "independent_directors": 2.0,
+    "women_directors": 2.0,
+    "statutory_auditor": "Walker Chandiok & Co LLP",
+    "managerial_remuneration_cr": 18.5,
+    "auditor_fees_audit_cr": 1.2,
+    "auditor_fees_non_audit_cr": 0.3,
+    "related_party_transactions_cr": 45.8
+  },
+  "timeline_events": [
+    {
+      "year": "1992",
+      "category": "Founding",
+      "description": "Company incorporated as Gravita India Limited in Jaipur",
+      "impact": "Foundation for lead recycling business"
+    },
+    {
+      "year": "2001",
+      "category": "Expansion",
+      "description": "Rajat Agarwal joins as Managing Director, family business expansion",
+      "impact": "Leadership transition and growth acceleration"
+    },
+    {
+      "year": "2010",
+      "category": "IPO",
+      "description": "Public listing on NSE and BSE",
+      "impact": "Access to capital markets for expansion funding"
+    },
+    {
+      "year": "2015",
+      "category": "International Expansion",
+      "description": "First overseas recycling facility established",
+      "impact": "Global footprint development begins"
+    },
+    {
+      "year": "2019",
+      "category": "Strategy",
+      "description": "Hedging strategy extended to core inventory for margin stability",
+      "impact": "Risk management enhancement and margin protection"
+    },
+    {
+      "year": "2022",
+      "category": "New Vertical",
+      "description": "Entry into aluminum and plastic recycling segments",
+      "impact": "Diversification beyond lead recycling"
+    },
+    {
+      "year": "2025",
+      "category": "Milestone",
+      "description": "Rs 1,000cr QIP oversubscribed 3.5x, achieving net debt-free status",
+      "impact": "Strong balance sheet for expansion plans"
+    },
+    {
+      "year": "2026",
+      "category": "Expansion",
+      "description": "RMIL acquisition completed for \u20b9559cr, entry into copper recycling",
+      "impact": "Copper vertical addition and manufacturing capacity boost"
+    },
+    {
+      "year": "2026E",
+      "category": "New Vertical",
+      "description": "Lithium-ion battery recycling plant commissioning at Mundra",
+      "impact": "Entry into high-growth EV battery recycling market"
+    },
+    {
+      "year": "2027E",
+      "category": "Expansion",
+      "description": "Target capacity expansion to 5.5 lakh MTPA",
+      "impact": "Significant scale-up in core recycling operations"
+    },
+    {
+      "year": "2028E",
+      "category": "Milestone",
+      "description": "Vision 2028 achievement - 7 lakh MTPA capacity, 25%+ ROIC",
+      "impact": "Capacity doubling with maintained high returns"
+    },
+    {
+      "year": "2029E",
+      "category": "Outlook",
+      "description": "Non-lead business contribution target of 30% revenue",
+      "impact": "Successful diversification into multiple recycling verticals"
+    }
+  ],
+  "risk_items": [
+    {
+      "category": "Regulatory",
+      "factor": "Environmental compliance and licensing delays",
+      "description": "Capacity expansion projects dependent on state-level consent-to-operate licenses, with recent delays in Gujarat affecting timeline.",
+      "mitigation": "Proactive engagement with regulatory authorities and maintaining buffer timelines for project completion",
+      "probability": "M",
+      "impact": "H",
+      "rating": "MEDIUM"
+    },
+    {
+      "category": "Market",
+      "factor": "Commodity price volatility",
+      "description": "Aluminum and plastic recycling exposed to price fluctuations due to lack of effective hedging mechanisms unlike lead operations.",
+      "mitigation": "Gradual introduction of aluminum hedging on MCX and focus on value-added products with stable margins",
+      "probability": "H",
+      "impact": "M",
+      "rating": "MEDIUM"
+    },
+    {
+      "category": "Operational",
+      "factor": "Raw material scrap availability",
+      "description": "Dependency on consistent scrap supply from domestic and international sources, with geopolitical tensions affecting import logistics.",
+      "mitigation": "Diversified supplier network across 70+ countries and increasing domestic scrap sourcing to 60%+",
+      "probability": "M",
+      "impact": "H",
+      "rating": "MEDIUM"
+    },
+    {
+      "category": "Competition",
+      "factor": "Market share erosion from organized players",
+      "description": "Entry of large corporations and battery OEMs into recycling space could intensify competition and margin pressure.",
+      "mitigation": "Strong brand relationships with OEMs, technical expertise, and focus on value-added products differentiation",
+      "probability": "M",
+      "impact": "M",
+      "rating": "LOW"
+    },
+    {
+      "category": "Execution",
+      "factor": "New vertical scaling challenges",
+      "description": "Lithium-ion, rubber, and copper recycling ventures require different technical expertise and market development than core lead business.",
+      "mitigation": "Pilot projects, strategic partnerships, and phased capacity additions with continuous monitoring of returns",
+      "probability": "H",
+      "impact": "M",
+      "rating": "MEDIUM"
+    },
+    {
+      "category": "Financial",
+      "factor": "High capital expenditure execution risk",
+      "description": "Rs 1,225cr capex plan through FY28 requires efficient capital allocation and project management across multiple geographies.",
+      "mitigation": "Disciplined ROIC benchmark of 25% for new investments and focus on brownfield expansion to reduce risks",
+      "probability": "M",
+      "impact": "H",
+      "rating": "MEDIUM"
+    },
+    {
+      "category": "Economic",
+      "factor": "Global economic slowdown impact",
+      "description": "Reduced industrial activity and infrastructure spending could affect demand for recycled metals and scrap availability.",
+      "mitigation": "Diversified end-user industries, export market presence, and focus on essential applications like batteries",
+      "probability": "M",
+      "impact": "M",
+      "rating": "LOW"
+    },
+    {
+      "category": "Technology",
+      "factor": "Technological obsolescence in recycling processes",
+      "description": "Rapid advancement in recycling technologies could make current processes less competitive or require significant upgrades.",
+      "mitigation": "Continuous R&D investment, technology partnerships, and regular equipment upgrades to maintain efficiency",
+      "probability": "L",
+      "impact": "M",
+      "rating": "LOW"
+    }
+  ],
+  "peers_detailed": [
+    {
+      "name": "Pondy Oxides & Chemicals",
+      "revenue_series": [
+        580.0,
+        720.0,
+        890.0,
+        1050.0,
+        1180.0
+      ],
+      "ebitda_margin_series": [
+        0.095,
+        0.108,
+        0.115,
+        0.118,
+        0.122
+      ],
+      "pat_series": [
+        42.0,
+        58.0,
+        72.0,
+        85.0,
+        98.0
+      ],
+      "mcap_cr": 890.0,
+      "pe": 15.8,
+      "pb": 2.1,
+      "roce_pct": 16.8,
+      "roe_pct": 18.2
+    },
+    {
+      "name": "Jain Resource Recycling",
+      "revenue_series": [
+        320.0,
+        380.0,
+        445.0,
+        520.0,
+        595.0
+      ],
+      "ebitda_margin_series": [
+        0.082,
+        0.089,
+        0.094,
+        0.098,
+        0.102
+      ],
+      "pat_series": [
+        18.0,
+        24.0,
+        29.0,
+        36.0,
+        42.0
+      ],
+      "mcap_cr": 425.0,
+      "pe": 18.2,
+      "pb": 1.8,
+      "roce_pct": 14.5,
+      "roe_pct": 19.6
+    },
+    {
+      "name": "Nile Ltd",
+      "revenue_series": [
+        145.0,
+        162.0,
+        185.0,
+        208.0,
+        225.0
+      ],
+      "ebitda_margin_series": [
+        0.065,
+        0.072,
+        0.078,
+        0.081,
+        0.084
+      ],
+      "pat_series": [
+        8.0,
+        11.0,
+        14.0,
+        17.0,
+        19.0
+      ],
+      "mcap_cr": 185.0,
+      "pe": 12.4,
+      "pb": 1.4,
+      "roce_pct": 12.8,
+      "roe_pct": 16.5
+    },
+    {
+      "name": "Eco Recycling",
+      "revenue_series": [
+        85.0,
+        95.0,
+        110.0,
+        128.0,
+        142.0
+      ],
+      "ebitda_margin_series": [
+        0.115,
+        0.122,
+        0.128,
+        0.132,
+        0.135
+      ],
+      "pat_series": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0
+      ],
+      "mcap_cr": 125.0,
+      "pe": 18.6,
+      "pb": 2.3,
+      "roce_pct": 18.2,
+      "roe_pct": 22.1
+    }
+  ]
+}
