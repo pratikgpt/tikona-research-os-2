@@ -33,6 +33,7 @@ import {
   unpublishReport,
   getReportBySession,
   createResearchReport,
+  uploadDocument,
 } from '@/lib/api';
 import type { ResearchReport } from '@/types/database';
 import { createRecommendation, hasRecommendationForSession } from '@/lib/recommendations-api';
@@ -375,6 +376,33 @@ export default function ResearchPipeline() {
         financial_model_file_url: storageResult.fileUrl,
         financial_model_json_url: storageResult.jsonFileUrl,
       });
+
+      // Upload the generated model to the Google Drive Vault so the user can see it
+      if (storageResult.fileUrl) {
+        try {
+          toast.info('Uploading model to Vault...');
+          const fileRes = await fetch(storageResult.fileUrl);
+          const blob = await fileRes.blob();
+          const reader = new FileReader();
+          reader.readAsDataURL(blob);
+          reader.onloadend = async () => {
+            try {
+              const base64data = (reader.result as string).split(',')[1];
+              const uploadedDoc = await uploadDocument(
+                vaultId, 
+                modelResult.fileName || `${selectedCompany.nse_symbol}_Model.xlsx`, 
+                base64data
+              );
+              setVaultDocuments(prev => [...prev, uploadedDoc]);
+              toast.success('Model added to Vault');
+            } catch (uploadErr) {
+              console.error('Failed to upload model to Drive:', uploadErr);
+            }
+          };
+        } catch (e) {
+          console.error('Failed to fetch model for Drive upload:', e);
+        }
+      }
 
       await transitionPipelineStatus(sessionId, 'vault_ready', 'financial_model_generating');
       setPipelineStatus('vault_ready');
@@ -1105,20 +1133,35 @@ export default function ResearchPipeline() {
                         <Upload className="h-3.5 w-3.5 mr-2" /> Upload
                       </Button>
 
+                      {/* Actions for vault_ready and later stages */}
+                      {['vault_ready', 'stage0_review', 'stage1_review', 'stage2_review', 'stage2_approved', 'published'].includes(pipelineStatus as string) && financialModelStatus !== 'generating' && (
+                        <div className="flex items-center gap-2 mt-4">
+                          <Button
+                            onClick={handleGenerateFinancialModel}
+                            size="sm"
+                            variant="outline"
+                            className="rounded-lg text-xs border-accent-200 text-accent-700 hover:bg-accent-50"
+                          >
+                            <BarChart3 className="h-3.5 w-3.5 mr-2" />
+                            {financialModelStatus === 'success' ? 'Regenerate Financial Model' : 'Generate Financial Model'}
+                          </Button>
+                          
+                          {pipelineStatus === 'vault_ready' && (
+                            <Button
+                              onClick={handleSkipFinancialModel}
+                              size="sm"
+                              variant="ghost"
+                              className="rounded-lg text-xs text-neutral-400 hover:text-neutral-600"
+                            >
+                              Skip Model
+                            </Button>
+                          )}
+                        </div>
+                      )}
+
                       {/* Two options at vault_ready */}
                       {pipelineStatus === 'vault_ready' && financialModelStatus !== 'generating' && (
                         <div className="flex items-center gap-2">
-                          {financialModelStatus === 'idle' && (
-                            <Button
-                              onClick={handleGenerateFinancialModel}
-                              size="sm"
-                              variant="outline"
-                              className="rounded-lg text-xs border-accent-200 text-accent-700 hover:bg-accent-50"
-                            >
-                              <BarChart3 className="h-3.5 w-3.5 mr-2" />
-                              Generate Financial Model
-                            </Button>
-                          )}
                           <Button
                             onClick={financialModelStatus === 'success' || financialModelStatus === 'skipped'
                               ? () => handleRunStage0()

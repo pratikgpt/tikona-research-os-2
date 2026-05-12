@@ -23,6 +23,7 @@ from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE
 
 from chart_generators import generate_chart
+import excel_injector
 
 import logging
 logger = logging.getLogger(__name__)
@@ -42,6 +43,26 @@ _ORPHAN_NUMBER_RE = re.compile(
     r"|(?:₹|\$|€|£|INR\s|USD\s|EUR\s|GBP\s)\s*\d[\d,]*(?:\.\d+)?",
     re.IGNORECASE,
 )
+
+# Placeholder tokens that the Excel injector needs to find intact.
+# fill_master_template() must NOT replace text in shapes containing these.
+_EXCEL_INJECTION_TOKENS: set[str] = {
+    "{{financial_model_from_excel}}",
+    "{{financial_model_from_excel_operational_sheet}}",
+    "{{financial_summary_image}}",
+    "{{earnings_forecast_table}}",
+    "{{financials_table}}",
+    "{{valuations_table}}",
+    "{{key_risks_table}}",
+    "{{peer_comparision}}",
+    "{{governance_table}}",
+    "{{timeline}}",
+    "{{competitive_chart_1}}",
+    "{{competitive_chart_2}}",
+    "{{pie_chart_1}}",
+    "{{pie_chart_2}}",
+    "{{probability_weight_table}}",
+}
 
 
 # ─────────── helpers ──────────────────────────────────────────────────────────
@@ -90,7 +111,9 @@ def _prefer(*vals: Any) -> str:
 
 
 def _clean_prose(text: str, *, max_len: int = 500) -> str:
-    cleaned = re.sub(r"\s+", " ", text or "").strip()
+    # Strip markdown bold/italic markers
+    cleaned = re.sub(r"\*\*|__", "", text or "")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
     if len(cleaned) <= max_len:
         return cleaned
     # Truncate at word boundary so we don't cut mid-word
@@ -693,6 +716,21 @@ def _download_model_json(client, ticker: str, warnings: list[str]) -> dict | Non
         return None
 
 
+def _download_model_excel(client, ticker: str, warnings: list[str], output_dir: Path) -> Path | None:
+    """Fetch financial-models/{TICKER}/{TICKER}_model.xlsx from research-reports-html."""
+    path = f"financial-models/{ticker}/{ticker}_model.xlsx"
+    try:
+        data = client.storage.from_(MODEL_BUCKET).download(path)
+        out_path = output_dir / f"{ticker}_model.xlsx"
+        with open(out_path, "wb") as f:
+            f.write(data)
+        return out_path
+    except Exception as exc:
+        logger.warning("model EXCEL download failed (%s): %s", path, exc)
+        warnings.append(f"Could not load financial model EXCEL sidecar (required for native charts/tables): {exc}")
+        return None
+
+
 def _upload(client, local: Path, key: str, content_type: str) -> tuple[str, str]:
     with open(local, "rb") as fh:
         body = fh.read()
@@ -853,10 +891,10 @@ def map_replacements(company, metadata, fin_model, sections):
         "p5": idea_bullets[4] if len(idea_bullets) > 4 else "",
         "p6": idea_bullets[5] if len(idea_bullets) > 5 else "",
         # ── Slide 8: Competitive Advantages ──────────────────────────────────
-        "competitve_advantage_1": comp_bullets[0] if len(comp_bullets) > 0 else "",
-        "competitve_advantage_2": comp_bullets[1] if len(comp_bullets) > 1 else "",
-        "competitve_advantage_3": comp_bullets[2] if len(comp_bullets) > 2 else "",
-        "competitve_advantage_4": comp_bullets[3] if len(comp_bullets) > 3 else "",
+        "competitive_advantage_1": comp_bullets[0] if len(comp_bullets) > 0 else "",
+        "competitive_advantage_2": comp_bullets[1] if len(comp_bullets) > 1 else "",
+        "competitive_advantage_3": comp_bullets[2] if len(comp_bullets) > 2 else "",
+        "competitive_advantage_4": comp_bullets[3] if len(comp_bullets) > 3 else "",
         "industry_tailwinds":     _clean_prose(industry, max_len=400),
         # ── Slide 9: Peer Comparison ──────────────────────────────────────────
         "peer_comparision": _clean_prose(peer_text, max_len=600),
@@ -877,6 +915,32 @@ def map_replacements(company, metadata, fin_model, sections):
         # ── Slide 15: SAARTHI ─────────────────────────────────────────────────
         "saarthi_heading":  "SAARTHI Score Analysis",
         "saarthi_content":  _clean_prose(saarthi_assessment, max_len=600),
+        # ── Slide 7: Company Timeline ─────────────────────────────────────────
+        "COMPANY_TIMELINE": _clean_prose(
+            _section_by_any(sections, ["timeline", "history", "milestones", "journey"]) or
+            _section_by_any(sections, ["company", "overview", "business"]),
+            max_len=800,
+        ),
+        # ── Slide 7: Business Idea Paragraphs (para_1..para_6) ────────────────
+        "para_1": idea_bullets[0] if len(idea_bullets) > 0 else "",
+        "para_2": idea_bullets[1] if len(idea_bullets) > 1 else "",
+        "para_3": idea_bullets[2] if len(idea_bullets) > 2 else "",
+        "para_4": idea_bullets[3] if len(idea_bullets) > 3 else "",
+        "para_5": idea_bullets[4] if len(idea_bullets) > 4 else "",
+        "para_6": idea_bullets[5] if len(idea_bullets) > 5 else "",
+        # ── Slide 14: Financial Commentary ────────────────────────────────────
+        "financial_commentry": _clean_prose(
+            _section_by_any(sections, ["financial", "earnings", "revenue", "profit"]) or
+            _all_sections_text(sections),
+            max_len=600,
+        ),
+        # ── Slide 15: Valuations Commentary ──────────────────────────────────
+        "commentry": _clean_prose(
+            _section_by_any(sections, ["valuation", "dcf", "pe_ratio", "fair_value"]) or
+            _section_by_any(sections, ["investment", "thesis"]) or
+            _all_sections_text(sections),
+            max_len=600,
+        ),
     }
 
     # ── Scenario data (Slides 16, 18) ─────────────────────────────────────────
@@ -1156,6 +1220,21 @@ def _insert_image_into_shape(slide, shape, img_bytes: bytes) -> None:
     slide.shapes.add_picture(_io.BytesIO(img_bytes), left, top, width, height)
 
 
+def _shape_is_excel_placeholder(shape) -> bool:
+    """Return True if the shape's entire text matches an Excel injection token.
+
+    These shapes must be preserved intact so the COM-based excel_injector
+    can locate them after fill_master_template() saves the PPTX.
+    """
+    if not hasattr(shape, "text_frame") or not shape.text_frame:
+        return False
+    try:
+        full_text = shape.text_frame.text.strip()
+    except Exception:
+        return False
+    return full_text in _EXCEL_INJECTION_TOKENS
+
+
 def fill_master_template(
     template_path: str,
     output_path: str,
@@ -1172,6 +1251,10 @@ def fill_master_template(
       - Named 'chart:<key>'    : replaced with a matplotlib chart image (see chart_generators.py)
       - Named 'table:<key>'    : populated from financial model series data
       - Native PPTX chart      : data updated with per-slide-type series from financial model
+
+    Shapes whose entire text matches an Excel injection placeholder token
+    (e.g. {{financial_summary_image}}) are deliberately SKIPPED so the
+    downstream COM-based excel_injector can still locate them.
     """
     prs = Presentation(template_path)
 
@@ -1185,6 +1268,11 @@ def fill_master_template(
 
         for shape in slide.shapes:
             shape_name = (shape.name or "").lower().strip()
+
+            # ── 0. Preserve Excel injection placeholders for COM injector ─────
+            if _shape_is_excel_placeholder(shape):
+                logger.debug("Preserving Excel placeholder shape: %s", shape.text_frame.text.strip())
+                continue
 
             # ── 1. chart:<key> shape → generate PNG and queue for insertion ──
             if shape_name.startswith("chart:"):
@@ -1223,6 +1311,79 @@ def fill_master_template(
                 logger.warning("Image insert failed for '%s': %s", shape.name, e)
 
     prs.save(output_path)
+
+
+def _cleanup_excel_placeholders(pptx_path: str, replacements: dict) -> int:
+    """Replace any surviving Excel injection placeholder tokens with fallback text.
+
+    After the COM-based excel_injector runs (or is skipped), some placeholder
+    shapes like {{financial_summary_image}} may still be present if injection
+    failed or was unavailable.  This pass replaces them with text content from
+    the replacements dict so raw {{...}} tokens never appear in the final deck.
+
+    Returns the number of placeholders cleaned up.
+    """
+    # Build a map from the full token text → fallback content
+    _FALLBACK_MAP: dict[str, str] = {
+        "{{financial_model_from_excel}}": "Financial model charts — see Excel model for details.",
+        "{{financial_model_from_excel_operational_sheet}}": "Operational data — see Excel model for details.",
+        "{{financial_summary_image}}": "Financial summary — see Excel model for details.",
+        "{{earnings_forecast_table}}": "Earnings forecast — see Excel model for details.",
+        "{{financials_table}}": "Financials — see Excel model for details.",
+        "{{valuations_table}}": "Valuations — see Excel model for details.",
+        "{{key_risks_table}}": "Key risks — see Excel model for details.",
+        "{{peer_comparision}}": replacements.get("peer_comparision", "Peer comparison — see Excel model for details."),
+        "{{governance_table}}": replacements.get("indicators", "Governance — see Excel model for details."),
+        "{{timeline}}": "Timeline — see Excel model for details.",
+        "{{competitive_chart_1}}": "Competitive positioning chart — see Excel model for details.",
+        "{{competitive_chart_2}}": "Competitive positioning chart — see Excel model for details.",
+        "{{pie_chart_1}}": "Segment breakdown — see Excel model for details.",
+        "{{pie_chart_2}}": "Segment breakdown — see Excel model for details.",
+        "{{probability_weight_table}}": "Probability-weighted scenario analysis — see Excel model for details.",
+    }
+
+    prs = Presentation(pptx_path)
+    cleaned = 0
+
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if not hasattr(shape, "text_frame") or not shape.text_frame:
+                continue
+            try:
+                full_text = shape.text_frame.text.strip()
+            except Exception:
+                continue
+            if full_text in _FALLBACK_MAP:
+                fallback = _FALLBACK_MAP[full_text]
+                # Preserve font from first run
+                saved_font: dict = {}
+                for para in shape.text_frame.paragraphs:
+                    if para.runs:
+                        f = para.runs[0].font
+                        saved_font["name"] = f.name
+                        saved_font["size"] = f.size
+                        saved_font["bold"] = f.bold
+                        break
+
+                # Clear and replace
+                for para in shape.text_frame.paragraphs:
+                    para.clear()
+                first_para = shape.text_frame.paragraphs[0]
+                run = first_para.add_run()
+                run.text = fallback
+                if saved_font.get("name"):
+                    run.font.name = saved_font["name"]
+                if saved_font.get("size"):
+                    run.font.size = saved_font["size"]
+
+                cleaned += 1
+                logger.info("Cleaned up unreplaced Excel placeholder: %s", full_text)
+
+    if cleaned > 0:
+        prs.save(pptx_path)
+        logger.info("Cleanup pass replaced %d surviving Excel placeholders", cleaned)
+
+    return cleaned
 
 
 def generate_pptx_for_report(report_id: str, session_id: str, *, use_mock: bool = False) -> dict:
@@ -1307,6 +1468,37 @@ def generate_pptx_for_report(report_id: str, session_id: str, *, use_mock: bool 
             )
         else:
             raise RuntimeError(f"Master template not found at {template_path}")
+
+        # Inject Excel visuals: COM on Windows, openpyxl+matplotlib everywhere else
+        logger.info("Attempting to inject Excel tables/charts into PPTX...")
+        excel_path = _download_model_excel(client, ticker, warnings, tmp_root)
+        injection_count = 0
+        if excel_path and excel_path.exists():
+            # inject_excel_visuals_into_ppt tries COM first, falls back to openpyxl renderer
+            injection_count = excel_injector.inject_excel_visuals_into_ppt(
+                str(excel_path), result_pptx_path
+            )
+            logger.info("Excel injection completed: %d visuals injected", injection_count)
+
+            # If main injector returned 0, try direct openpyxl rendering as second chance
+            if injection_count == 0:
+                logger.info("Trying direct openpyxl sheet rendering as fallback...")
+                images = excel_injector.render_all_excel_sheets(str(excel_path))
+                if images:
+                    injection_count = excel_injector.inject_excel_visuals_into_pptx(
+                        result_pptx_path, images
+                    )
+                    logger.info("Openpyxl fallback injected %d visuals", injection_count)
+        else:
+            logger.warning("No Excel file available — Excel injection skipped entirely")
+            warnings.append("Excel model file not found; financial tables/charts use text fallback")
+
+        if injection_count > 0:
+            warnings.append(f"Injected {injection_count} Excel tables/charts into the report")
+
+        # Cleanup pass: replace any surviving Excel injection placeholder tokens
+        # with text-based fallback content so they don't appear as raw {{...}} text.
+        _cleanup_excel_placeholders(result_pptx_path, replacements)
 
         # Upload artifacts
         ts = int(time.time())

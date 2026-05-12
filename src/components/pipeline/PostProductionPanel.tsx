@@ -543,7 +543,7 @@ export default function PostProductionPanel({
                   className="rounded-lg bg-accent-600 hover:bg-accent-700"
                 >
                   {pptxGenerating ? (
-                    <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Generating ({formatTime(pptxElapsedSeconds)})...</>
+                    <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> {pptxElapsedSeconds > 15 ? 'Injecting Excel Charts...' : 'Building Slides...'} ({formatTime(pptxElapsedSeconds)})</>
                   ) : (
                     <><Presentation className="h-3.5 w-3.5 mr-1.5" /> Generate PPTX</>
                   )}
@@ -558,9 +558,36 @@ export default function PostProductionPanel({
                   Mock planner (skip OpenRouter)
                 </label>
               </div>
+              {pptxGenerating && (
+                <div className="text-[11px] text-accent-600 animate-pulse mt-2 flex items-center gap-1.5">
+                  <div className="h-1.5 w-1.5 rounded-full bg-accent-600" />
+                  Generating text, building slides, and importing high-fidelity Excel tables...
+                </div>
+              )}
               {!reportId && (
                 <p className="text-[11px] text-neutral-400">Approve stage 2 first to create the report row.</p>
               )}
+
+              <div className="mt-4 p-3 bg-blue-50/50 border border-blue-100 rounded-lg">
+                <p className="text-[11px] font-semibold text-blue-800 mb-2">Automated Excel Injections</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[10px] text-neutral-600 font-mono">
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{financial_model_from_excel}}`}</span><span className="text-blue-700 font-semibold">Op_Charts</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{financial_model_from_excel_operational_sheet}}`}</span><span className="text-blue-700 font-semibold">Operational_Data</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{financial_summary_image}}`}</span><span className="text-blue-700 font-semibold">Fin_Summary</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{earnings_forecast_table}}`}</span><span className="text-blue-700 font-semibold">Earnings_Forecast</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{financials_table}}`}</span><span className="text-blue-700 font-semibold">Financials_Table</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{valuations_table}}`}</span><span className="text-blue-700 font-semibold">Valuations_Table</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{key_risks_table}}`}</span><span className="text-blue-700 font-semibold">Key_Risks</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{peer_comparision}}`}</span><span className="text-blue-700 font-semibold">Peer_Compare</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{governance_table}}`}</span><span className="text-blue-700 font-semibold">Governance</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{timeline}}`}</span><span className="text-blue-700 font-semibold">Timeline</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{competitive_chart_1}}`}</span><span className="text-blue-700 font-semibold">Comp_Chart_1</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{competitive_chart_2}}`}</span><span className="text-blue-700 font-semibold">Comp_Chart_2</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{pie_chart_1}}`}</span><span className="text-blue-700 font-semibold">Pie_Chart_1</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{pie_chart_2}}`}</span><span className="text-blue-700 font-semibold">Pie_Chart_2</span></div>
+                  <div className="flex justify-between pb-1"><span>{`{{probability_weight_table}}`}</span><span className="text-blue-700 font-semibold">Prob_Weight</span></div>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="space-y-3">

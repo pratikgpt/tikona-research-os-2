@@ -88,19 +88,39 @@ const PLACEHOLDER_GROUPS: GroupDef[] = [
     fields: [
       { key: 'p1', label: 'Business Point 1', type: 'textarea' },
       { key: 'p2', label: 'Business Point 2', type: 'textarea' },
+      { key: 'p3', label: 'Business Point 3', type: 'textarea' },
       { key: 'p4', label: 'Business Point 4', type: 'textarea' },
       { key: 'p5', label: 'Business Point 5', type: 'textarea' },
       { key: 'p6', label: 'Business Point 6', type: 'textarea' },
     ],
   },
   {
+    title: 'Business Idea Paragraphs',
+    slide: 'Slide 7',
+    fields: [
+      { key: 'para_1', label: 'Paragraph 1', type: 'textarea' },
+      { key: 'para_2', label: 'Paragraph 2', type: 'textarea' },
+      { key: 'para_3', label: 'Paragraph 3', type: 'textarea' },
+      { key: 'para_4', label: 'Paragraph 4', type: 'textarea' },
+      { key: 'para_5', label: 'Paragraph 5', type: 'textarea' },
+      { key: 'para_6', label: 'Paragraph 6', type: 'textarea' },
+    ],
+  },
+  {
+    title: 'Company Timeline',
+    slide: 'Slide 7',
+    fields: [
+      { key: 'COMPANY_TIMELINE', label: 'Company History / Milestones', type: 'textarea' },
+    ],
+  },
+  {
     title: 'Competitive Advantages',
     slide: 'Slide 8',
     fields: [
-      { key: 'competitve_advantage_1', label: 'Advantage 1', type: 'textarea' },
-      { key: 'competitve_advantage_2', label: 'Advantage 2', type: 'textarea' },
-      { key: 'competitve_advantage_3', label: 'Advantage 3', type: 'textarea' },
-      { key: 'competitve_advantage_4', label: 'Advantage 4', type: 'textarea' },
+      { key: 'competitive_advantage_1', label: 'Advantage 1', type: 'textarea' },
+      { key: 'competitive_advantage_2', label: 'Advantage 2', type: 'textarea' },
+      { key: 'competitive_advantage_3', label: 'Advantage 3', type: 'textarea' },
+      { key: 'competitive_advantage_4', label: 'Advantage 4', type: 'textarea' },
     ],
   },
   {
@@ -125,6 +145,20 @@ const PLACEHOLDER_GROUPS: GroupDef[] = [
     slide: 'Slide 11',
     fields: [
       { key: 'indicators', label: 'Governance Indicators', type: 'textarea' },
+    ],
+  },
+  {
+    title: 'Financial Commentary',
+    slide: 'Slide 14',
+    fields: [
+      { key: 'financial_commentry', label: 'Financial Performance Commentary', type: 'textarea' },
+    ],
+  },
+  {
+    title: 'Valuations Commentary',
+    slide: 'Slide 15',
+    fields: [
+      { key: 'commentry', label: 'Valuations Commentary', type: 'textarea' },
     ],
   },
   {
@@ -176,6 +210,8 @@ const EXCLUDED_KEYS = new Set([
   'timeline',
   'competitive_chart_1',
   'competitive_chart_2',
+  'pie_chart_1',
+  'pie_chart_2',
   'governance_table',
   'earnings_forecast_table',
   'financials_table',
