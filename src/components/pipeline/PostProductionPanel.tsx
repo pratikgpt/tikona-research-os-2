@@ -579,8 +579,13 @@ export default function PostProductionPanel({
                   <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{valuations_table}}`}</span><span className="text-blue-700 font-semibold">Valuations_Table</span></div>
                   <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{key_risks_table}}`}</span><span className="text-blue-700 font-semibold">Key_Risks</span></div>
                   <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{peer_comparision}}`}</span><span className="text-blue-700 font-semibold">Peer_Compare</span></div>
-                  <div className="flex justify-between pb-1"><span>{`{{governance_table}}`}</span><span className="text-blue-700 font-semibold">Governance</span></div>
-                  <div className="flex justify-between pb-1"><span>{`{{timeline}}`}</span><span className="text-blue-700 font-semibold">Timeline</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{governance_table}}`}</span><span className="text-blue-700 font-semibold">Governance</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{timeline}}`}</span><span className="text-blue-700 font-semibold">Timeline</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{competitive_chart_1}}`}</span><span className="text-blue-700 font-semibold">Comp_Chart_1</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{competitive_chart_2}}`}</span><span className="text-blue-700 font-semibold">Comp_Chart_2</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{pie_chart_1}}`}</span><span className="text-blue-700 font-semibold">Pie_Chart_1</span></div>
+                  <div className="flex justify-between border-b border-blue-100 pb-1"><span>{`{{pie_chart_2}}`}</span><span className="text-blue-700 font-semibold">Pie_Chart_2</span></div>
+                  <div className="flex justify-between pb-1"><span>{`{{probability_weight_table}}`}</span><span className="text-blue-700 font-semibold">Prob_Weight</span></div>
                 </div>
               </div>
             </div>

@@ -57,6 +57,11 @@ _EXCEL_INJECTION_TOKENS: set[str] = {
     "{{peer_comparision}}",
     "{{governance_table}}",
     "{{timeline}}",
+    "{{competitive_chart_1}}",
+    "{{competitive_chart_2}}",
+    "{{pie_chart_1}}",
+    "{{pie_chart_2}}",
+    "{{probability_weight_table}}",
 }
 
 
@@ -886,10 +891,10 @@ def map_replacements(company, metadata, fin_model, sections):
         "p5": idea_bullets[4] if len(idea_bullets) > 4 else "",
         "p6": idea_bullets[5] if len(idea_bullets) > 5 else "",
         # ── Slide 8: Competitive Advantages ──────────────────────────────────
-        "competitve_advantage_1": comp_bullets[0] if len(comp_bullets) > 0 else "",
-        "competitve_advantage_2": comp_bullets[1] if len(comp_bullets) > 1 else "",
-        "competitve_advantage_3": comp_bullets[2] if len(comp_bullets) > 2 else "",
-        "competitve_advantage_4": comp_bullets[3] if len(comp_bullets) > 3 else "",
+        "competitive_advantage_1": comp_bullets[0] if len(comp_bullets) > 0 else "",
+        "competitive_advantage_2": comp_bullets[1] if len(comp_bullets) > 1 else "",
+        "competitive_advantage_3": comp_bullets[2] if len(comp_bullets) > 2 else "",
+        "competitive_advantage_4": comp_bullets[3] if len(comp_bullets) > 3 else "",
         "industry_tailwinds":     _clean_prose(industry, max_len=400),
         # ── Slide 9: Peer Comparison ──────────────────────────────────────────
         "peer_comparision": _clean_prose(peer_text, max_len=600),
@@ -910,6 +915,32 @@ def map_replacements(company, metadata, fin_model, sections):
         # ── Slide 15: SAARTHI ─────────────────────────────────────────────────
         "saarthi_heading":  "SAARTHI Score Analysis",
         "saarthi_content":  _clean_prose(saarthi_assessment, max_len=600),
+        # ── Slide 7: Company Timeline ─────────────────────────────────────────
+        "COMPANY_TIMELINE": _clean_prose(
+            _section_by_any(sections, ["timeline", "history", "milestones", "journey"]) or
+            _section_by_any(sections, ["company", "overview", "business"]),
+            max_len=800,
+        ),
+        # ── Slide 7: Business Idea Paragraphs (para_1..para_6) ────────────────
+        "para_1": idea_bullets[0] if len(idea_bullets) > 0 else "",
+        "para_2": idea_bullets[1] if len(idea_bullets) > 1 else "",
+        "para_3": idea_bullets[2] if len(idea_bullets) > 2 else "",
+        "para_4": idea_bullets[3] if len(idea_bullets) > 3 else "",
+        "para_5": idea_bullets[4] if len(idea_bullets) > 4 else "",
+        "para_6": idea_bullets[5] if len(idea_bullets) > 5 else "",
+        # ── Slide 14: Financial Commentary ────────────────────────────────────
+        "financial_commentry": _clean_prose(
+            _section_by_any(sections, ["financial", "earnings", "revenue", "profit"]) or
+            _all_sections_text(sections),
+            max_len=600,
+        ),
+        # ── Slide 15: Valuations Commentary ──────────────────────────────────
+        "commentry": _clean_prose(
+            _section_by_any(sections, ["valuation", "dcf", "pe_ratio", "fair_value"]) or
+            _section_by_any(sections, ["investment", "thesis"]) or
+            _all_sections_text(sections),
+            max_len=600,
+        ),
     }
 
     # ── Scenario data (Slides 16, 18) ─────────────────────────────────────────
@@ -1304,6 +1335,11 @@ def _cleanup_excel_placeholders(pptx_path: str, replacements: dict) -> int:
         "{{peer_comparision}}": replacements.get("peer_comparision", "Peer comparison — see Excel model for details."),
         "{{governance_table}}": replacements.get("indicators", "Governance — see Excel model for details."),
         "{{timeline}}": "Timeline — see Excel model for details.",
+        "{{competitive_chart_1}}": "Competitive positioning chart — see Excel model for details.",
+        "{{competitive_chart_2}}": "Competitive positioning chart — see Excel model for details.",
+        "{{pie_chart_1}}": "Segment breakdown — see Excel model for details.",
+        "{{pie_chart_2}}": "Segment breakdown — see Excel model for details.",
+        "{{probability_weight_table}}": "Probability-weighted scenario analysis — see Excel model for details.",
     }
 
     prs = Presentation(pptx_path)
