@@ -23,6 +23,7 @@ from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE
 
 from chart_generators import generate_chart
+import excel_injector
 
 import logging
 logger = logging.getLogger(__name__)
@@ -90,7 +91,9 @@ def _prefer(*vals: Any) -> str:
 
 
 def _clean_prose(text: str, *, max_len: int = 500) -> str:
-    cleaned = re.sub(r"\s+", " ", text or "").strip()
+    # Strip markdown bold/italic markers
+    cleaned = re.sub(r"\*\*|__", "", text or "")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
     if len(cleaned) <= max_len:
         return cleaned
     # Truncate at word boundary so we don't cut mid-word
@@ -690,6 +693,21 @@ def _download_model_json(client, ticker: str, warnings: list[str]) -> dict | Non
     except Exception as exc:
         logger.warning("model JSON download failed (%s): %s", path, exc)
         warnings.append(f"Could not load financial model JSON sidecar: {exc}")
+        return None
+
+
+def _download_model_excel(client, ticker: str, warnings: list[str], output_dir: Path) -> Path | None:
+    """Fetch financial-models/{TICKER}/{TICKER}_model.xlsx from research-reports-html."""
+    path = f"financial-models/{ticker}/{ticker}_model.xlsx"
+    try:
+        data = client.storage.from_(MODEL_BUCKET).download(path)
+        out_path = output_dir / f"{ticker}_model.xlsx"
+        with open(out_path, "wb") as f:
+            f.write(data)
+        return out_path
+    except Exception as exc:
+        logger.warning("model EXCEL download failed (%s): %s", path, exc)
+        warnings.append(f"Could not load financial model EXCEL sidecar (required for native charts/tables): {exc}")
         return None
 
 
@@ -1307,6 +1325,12 @@ def generate_pptx_for_report(report_id: str, session_id: str, *, use_mock: bool 
             )
         else:
             raise RuntimeError(f"Master template not found at {template_path}")
+
+        # Try to download the Excel file and inject native visuals (if pywin32 is available)
+        logger.info("Attempting to inject native Excel tables/charts via COM automation...")
+        excel_path = _download_model_excel(client, ticker, warnings, tmp_root)
+        if excel_path and excel_path.exists():
+            excel_injector.inject_excel_visuals_into_ppt(str(excel_path), result_pptx_path)
 
         # Upload artifacts
         ts = int(time.time())

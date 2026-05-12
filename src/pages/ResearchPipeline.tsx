@@ -33,6 +33,7 @@ import {
   unpublishReport,
   getReportBySession,
   createResearchReport,
+  uploadDocument,
 } from '@/lib/api';
 import type { ResearchReport } from '@/types/database';
 import { createRecommendation, hasRecommendationForSession } from '@/lib/recommendations-api';
@@ -375,6 +376,33 @@ export default function ResearchPipeline() {
         financial_model_file_url: storageResult.fileUrl,
         financial_model_json_url: storageResult.jsonFileUrl,
       });
+
+      // Upload the generated model to the Google Drive Vault so the user can see it
+      if (storageResult.fileUrl) {
+        try {
+          toast.info('Uploading model to Vault...');
+          const fileRes = await fetch(storageResult.fileUrl);
+          const blob = await fileRes.blob();
+          const reader = new FileReader();
+          reader.readAsDataURL(blob);
+          reader.onloadend = async () => {
+            try {
+              const base64data = (reader.result as string).split(',')[1];
+              const uploadedDoc = await uploadDocument(
+                vaultId, 
+                modelResult.fileName || `${selectedCompany.nse_symbol}_Model.xlsx`, 
+                base64data
+              );
+              setVaultDocuments(prev => [...prev, uploadedDoc]);
+              toast.success('Model added to Vault');
+            } catch (uploadErr) {
+              console.error('Failed to upload model to Drive:', uploadErr);
+            }
+          };
+        } catch (e) {
+          console.error('Failed to fetch model for Drive upload:', e);
+        }
+      }
 
       await transitionPipelineStatus(sessionId, 'vault_ready', 'financial_model_generating');
       setPipelineStatus('vault_ready');
