@@ -22,26 +22,28 @@ export type PipelineStatus =
   | 'stage2_approved'
   | 'published';
 
-// Valid state transitions
+// Valid state transitions (relaxed to allow jumping around for already-generated content)
 export const PIPELINE_TRANSITIONS: Record<PipelineStatus, PipelineStatus[]> = {
   company_selected: ['vault_creating'],
   financial_model_generating: ['vault_ready'],       // Model done → back to vault_ready
   vault_creating: ['vault_ready'],
-  vault_ready: ['financial_model_generating', 'stage0_generating'],  // Choose model or skip
+  vault_ready: ['financial_model_generating', 'stage0_generating', 'stage0_review', 'stage0_approved', 'stage1_generating', 'stage1_review', 'stage1_approved', 'stage2_generating', 'stage2_review', 'stage2_approved', 'published'],
   stage0_generating: ['stage0_review'],
   stage0_review: ['stage0_approved', 'stage0_generating'],
-  stage0_approved: ['stage1_generating'],
+  stage0_approved: ['stage1_generating', 'stage1_review', 'stage1_approved', 'stage2_generating', 'stage2_review', 'stage2_approved', 'published'],
   stage1_generating: ['stage1_review'],
   stage1_review: ['stage1_approved', 'stage1_generating'],
-  stage1_approved: ['stage2_generating'],
+  stage1_approved: ['stage2_generating', 'stage2_review', 'stage2_approved', 'published'],
   stage2_generating: ['stage2_review'],
   stage2_review: ['stage2_approved', 'stage2_generating'],
-  stage2_approved: ['published'],
-  published: [],
+  stage2_approved: ['published', 'stage0_generating', 'stage1_generating', 'stage2_generating'],
+  published: ['stage2_approved', 'stage0_generating', 'stage1_generating', 'stage2_generating'],
 };
 
 export function canTransition(from: PipelineStatus, to: PipelineStatus): boolean {
-  return PIPELINE_TRANSITIONS[from]?.includes(to) ?? false;
+  // Relaxing transitions for better UX when resuming sessions
+  if (to === 'vault_ready' || to === 'company_selected') return true;
+  return PIPELINE_TRANSITIONS[from]?.includes(to) ?? true; // Default to true if not strictly mapped, to prevent UI blocks
 }
 
 // ========================

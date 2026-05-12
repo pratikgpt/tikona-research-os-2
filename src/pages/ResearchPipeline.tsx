@@ -1133,20 +1133,35 @@ export default function ResearchPipeline() {
                         <Upload className="h-3.5 w-3.5 mr-2" /> Upload
                       </Button>
 
+                      {/* Actions for vault_ready and later stages */}
+                      {['vault_ready', 'stage0_review', 'stage1_review', 'stage2_review', 'stage2_approved', 'published'].includes(pipelineStatus as string) && financialModelStatus !== 'generating' && (
+                        <div className="flex items-center gap-2 mt-4">
+                          <Button
+                            onClick={handleGenerateFinancialModel}
+                            size="sm"
+                            variant="outline"
+                            className="rounded-lg text-xs border-accent-200 text-accent-700 hover:bg-accent-50"
+                          >
+                            <BarChart3 className="h-3.5 w-3.5 mr-2" />
+                            {financialModelStatus === 'success' ? 'Regenerate Financial Model' : 'Generate Financial Model'}
+                          </Button>
+                          
+                          {pipelineStatus === 'vault_ready' && (
+                            <Button
+                              onClick={handleSkipFinancialModel}
+                              size="sm"
+                              variant="ghost"
+                              className="rounded-lg text-xs text-neutral-400 hover:text-neutral-600"
+                            >
+                              Skip Model
+                            </Button>
+                          )}
+                        </div>
+                      )}
+
                       {/* Two options at vault_ready */}
                       {pipelineStatus === 'vault_ready' && financialModelStatus !== 'generating' && (
                         <div className="flex items-center gap-2">
-                          {financialModelStatus === 'idle' && (
-                            <Button
-                              onClick={handleGenerateFinancialModel}
-                              size="sm"
-                              variant="outline"
-                              className="rounded-lg text-xs border-accent-200 text-accent-700 hover:bg-accent-50"
-                            >
-                              <BarChart3 className="h-3.5 w-3.5 mr-2" />
-                              Generate Financial Model
-                            </Button>
-                          )}
                           <Button
                             onClick={financialModelStatus === 'success' || financialModelStatus === 'skipped'
                               ? () => handleRunStage0()
