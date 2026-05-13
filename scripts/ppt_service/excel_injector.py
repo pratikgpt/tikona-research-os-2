@@ -28,7 +28,6 @@ _LIGHT_BG = "#f8f9fc"
 
 # Map placeholder token → sheet name(s) to try
 PLACEHOLDER_SHEET_MAP: dict[str, list[str]] = {
-    "{{financial_summary_image}}": ["Fin_Summary"],
     "{{earnings_forecast_table}}": ["Earnings_Forecast"],
     "{{financials_table}}": ["Financials_Table"],
     "{{valuations_table}}": ["Valuations_Table"],
@@ -392,7 +391,6 @@ def _com_inject(excel_path: str, ppt_path: str) -> int:
 
         shapes_replaced = 0
         placeholder_map = {
-            "{{financial_summary_image}}": "Fin_Summary",
             "{{earnings_forecast_table}}": "Earnings_Forecast",
             "{{financials_table}}": "Financials_Table",
             "{{valuations_table}}": "Valuations_Table",
