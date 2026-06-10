@@ -1,13 +1,14 @@
 FROM python:3.12-slim
 
-# Install Node.js 20 + system libs required by Playwright Chromium
+# Install Node.js 20 + system libs required by Playwright Chromium + LibreOffice for PDF conversion
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       curl ca-certificates fonts-liberation \
       libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
       libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
       libxrandr2 libgbm1 libasound2 libpango-1.0-0 libpangocairo-1.0-0 \
-      libcairo2 libatspi2.0-0 libx11-6 libxcb1 libxext6 && \
+      libcairo2 libatspi2.0-0 libx11-6 libxcb1 libxext6 \
+      libreoffice-nogui && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     apt-get clean && rm -rf /var/lib/apt/lists/*

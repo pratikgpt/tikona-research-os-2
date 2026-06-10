@@ -414,25 +414,49 @@ export default function PostProductionPanel({
     const timer = setInterval(() => setVideoElapsedSeconds((p) => p + 1), 1000);
 
     try {
-      const response = await fetch(`${N8N_BASE}/generate-video`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          report_id: reportId,
-          company_name: companyName,
-          nse_symbol: nseSymbol,
-        }),
-      });
-      if (!response.ok) throw new Error('Video generation failed');
+      // Fire-and-forget: use a 30 s timeout so we don't hang if the n8n
+      // webhook is set to "respond when last node finishes" (which would
+      // block for ~15 min and trigger a 504 from the reverse proxy / Vercel).
+      // The video generation runs server-side regardless of whether we
+      // receive the HTTP response — we only need to confirm the kick-off.
+      let kickoffOk = false;
+      try {
+        const response = await fetch(`${N8N_BASE}/generate-video`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            report_id: reportId,
+            company_name: companyName,
+            nse_symbol: nseSymbol,
+          }),
+          signal: AbortSignal.timeout(30_000), // 30 s max for kickoff
+        });
+        kickoffOk = response.ok;
+        if (!response.ok) {
+          console.warn('[Video] Kickoff response not OK:', response.status);
+        }
+      } catch (kickoffErr) {
+        // Timeout or network error — the job may still be running on n8n.
+        // Log and continue to polling; if n8n truly didn't start, the poll
+        // will simply time out gracefully.
+        console.warn('[Video] Kickoff fetch timed out or failed (job may still be running):', kickoffErr);
+      }
 
-      toast.info('Video generation started — may take 3-5 minutes...');
-      const url = await pollSupabaseColumn('video_file_url', 60, 5000);
+      toast.info(
+        kickoffOk
+          ? 'Video generation started — may take 10-15 minutes...'
+          : 'Video generation may be starting — polling for result...',
+      );
+
+      // Poll Supabase for the video_file_url column.
+      // 240 attempts × 5 s = 20 minutes — enough for a 15-min generation.
+      const url = await pollSupabaseColumn('video_file_url', 240, 5000);
 
       if (url) {
         setVideoFileUrl(url);
         toast.success('Video generated!');
       } else {
-        toast.warning('Video generation taking longer than expected. Check back later.');
+        toast.warning('Video generation taking longer than expected. Check back later — the video may still be processing.');
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to generate video');
