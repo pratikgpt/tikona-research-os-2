@@ -101,22 +101,37 @@ export async function generateFinancialModel(
     const POLL_INTERVAL_MS = 15_000; // 15 s between polls
     const MAX_WAIT_MS = 20 * 60 * 1000; // 20 min max
     const startedAt = Date.now();
+    let consecutive404s = 0;
 
     while (Date.now() - startedAt < MAX_WAIT_MS) {
       await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
 
-      const statusResp = await fetch(`${FM_PROXY_URL}/status/${jobId}`, {
+      const statusResp = await fetch(`${FM_PROXY_URL}/job/${jobId}`, {
         signal: AbortSignal.timeout(10_000),
       });
 
+      if (statusResp.status === 404) {
+        consecutive404s++;
+        console.warn(`[FM] /job/${jobId} returned 404 (${consecutive404s}x) — job endpoint may not exist on this VPS build`);
+        if (consecutive404s >= 2) {
+          // Job status endpoint doesn't exist on this Python service deployment.
+          // Break out and fall through to the synchronous direct-VPS call below.
+          console.warn('[FM] Job endpoint unavailable — falling back to synchronous /generate via direct VPS URL');
+          break;
+        }
+        continue;
+      }
+
+      consecutive404s = 0; // reset on any non-404
+
       if (!statusResp.ok) {
-        console.warn('[FM] Status poll returned', statusResp.status, '— retrying');
+        console.warn('[FM] Job poll returned', statusResp.status, '— retrying');
         continue;
       }
 
       const statusData = await statusResp.json() as Record<string, unknown>;
-      const state = statusData.state as string | undefined;
-      console.log(`[FM] Job ${jobId} state: ${state}`);
+      const state = (statusData.status || statusData.state) as string | undefined;
+      console.log(`[FM] Job ${jobId} status/state: ${state}`);
 
       if (state === 'SUCCESS' || state === 'success' || state === 'completed') {
         return _extractFmResult(statusData, fileName);
@@ -125,9 +140,14 @@ export async function generateFinancialModel(
       if (state === 'FAILURE' || state === 'error' || state === 'failed') {
         throw new Error((statusData.message as string) || 'Financial model generation failed on VPS');
       }
-      // state is 'PENDING' / 'RUNNING' — keep polling
+      // state is 'PENDING' / 'RUNNING' / 'processing' — keep polling
     }
-    throw new Error('Financial model timed out after 20 minutes. Check the VPS service logs.');
+
+    // Only throw timeout if we exhausted the full wait window (not a 404 break)
+    if (Date.now() - startedAt >= MAX_WAIT_MS) {
+      throw new Error('Financial model timed out after 20 minutes. Check the VPS service logs.');
+    }
+    // else: fell through from 404 break — continue to sync fallback below
   }
 
   // ── Synchronous fallback path (no /generate-async on this VPS build) ────────

@@ -76,6 +76,7 @@ class GenerateResponse(BaseModel):
 class JobStatus(BaseModel):
     job_id: str
     status: str  # "processing" | "completed" | "failed"
+    state: str | None = None  # alias for status, for frontend compatibility
     file_name: str | None = None
     file_path: str | None = None
     storage_path: str | None = None
@@ -270,6 +271,7 @@ def generate_async(req: GenerateRequest, background_tasks: BackgroundTasks):
 
 
 @app.get("/job/{job_id}", response_model=JobStatus)
+@app.get("/status/{job_id}", response_model=JobStatus)
 def get_job_status(job_id: str):
     """Check the status of an async generation job."""
     if job_id not in jobs:
@@ -279,6 +281,7 @@ def get_job_status(job_id: str):
     return JobStatus(
         job_id=job_id,
         status=job["status"],
+        state=job["status"],
         file_name=job.get("file_name"),
         file_path=job.get("file_path"),
         storage_path=job.get("storage_path"),
