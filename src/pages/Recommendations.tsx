@@ -41,6 +41,7 @@ import {
   Award,
   AlertCircle,
   RefreshCcw,
+  Bell,
 } from 'lucide-react';
 
 // ========================
@@ -430,6 +431,7 @@ export default function Recommendations() {
   const [reportFileUrl, setReportFileUrl] = useState('');
   const [, setReportFile] = useState<File | null>(null);
   const [sendTelegram, setSendTelegram] = useState(true);
+  const [sendPush, setSendPush] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
 
   // ---- My Recommendations state ----
@@ -535,12 +537,19 @@ export default function Recommendations() {
         report_file_url: reportFileUrl || null,
         session_id: null,
         send_telegram: sendTelegram,
+        send_push: sendPush,
         created_by: user?.email ?? null,
       });
 
-      toast.success(sendTelegram
-        ? 'Recommendation created & sent to Telegram'
-        : 'Recommendation created');
+      let successMsg = 'Recommendation created';
+      if (sendTelegram && sendPush) {
+        successMsg = 'Recommendation created, sent to Telegram & Push Notification triggered';
+      } else if (sendTelegram) {
+        successMsg = 'Recommendation created & sent to Telegram';
+      } else if (sendPush) {
+        successMsg = 'Recommendation created & Push Notification triggered';
+      }
+      toast.success(successMsg);
 
       // Reset form
       setSelectedCompany(null);
@@ -554,6 +563,8 @@ export default function Recommendations() {
       setTradeNotes('');
       setReportFileUrl('');
       setReportFile(null);
+      setSendTelegram(true);
+      setSendPush(true);
     } catch (e) {
       toast.error(`Failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
     } finally {
@@ -913,20 +924,34 @@ export default function Recommendations() {
                   </p>
                 </div>
 
-                {/* Telegram toggle + Create */}
+                {/* Telegram & Push toggles + Create */}
                 <div className="flex items-center justify-between pt-2 border-t border-neutral-100">
-                  <button
-                    onClick={() => setSendTelegram(!sendTelegram)}
-                    className={cn(
-                      'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all',
-                      sendTelegram
-                        ? 'bg-accent-50 text-accent-700 border-accent-200'
-                        : 'bg-neutral-50 text-neutral-500 border-neutral-200'
-                    )}
-                  >
-                    <Send className={cn('h-4 w-4', sendTelegram ? 'text-accent-600' : 'text-neutral-400')} />
-                    {sendTelegram ? 'Send to Telegram' : 'Skip Telegram'}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setSendTelegram(!sendTelegram)}
+                      className={cn(
+                        'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all',
+                        sendTelegram
+                          ? 'bg-accent-50 text-accent-700 border-accent-200'
+                          : 'bg-neutral-50 text-neutral-500 border-neutral-200'
+                      )}
+                    >
+                      <Send className={cn('h-4 w-4', sendTelegram ? 'text-accent-600' : 'text-neutral-400')} />
+                      {sendTelegram ? 'Send to Telegram' : 'Skip Telegram'}
+                    </button>
+                    <button
+                      onClick={() => setSendPush(!sendPush)}
+                      className={cn(
+                        'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all',
+                        sendPush
+                          ? 'bg-accent-50 text-accent-700 border-accent-200'
+                          : 'bg-neutral-50 text-neutral-500 border-neutral-200'
+                      )}
+                    >
+                      <Bell className={cn('h-4 w-4', sendPush ? 'text-accent-600' : 'text-neutral-400')} />
+                      {sendPush ? 'Send Push' : 'Skip Push'}
+                    </button>
+                  </div>
                   <Button
                     onClick={handleCreate}
                     disabled={isCreating || !selectedCompany || !targetPrice || selectedPlans.length === 0}
