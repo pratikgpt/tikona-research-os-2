@@ -79,6 +79,7 @@ class GeneratePptxRequest(BaseModel):
 class PreviewPlaceholdersRequest(BaseModel):
     reportId: str
     sessionId: str
+    ignoreOverrides: bool = False
 
 
 class GeneratePptxResponse(BaseModel):
@@ -106,9 +107,9 @@ def health():
 
 @app.post("/preview-placeholders")
 def preview_placeholders(req: PreviewPlaceholdersRequest):
-    logger.info("POST /preview-placeholders report=%s session=%s", req.reportId, req.sessionId)
+    logger.info("POST /preview-placeholders report=%s session=%s ignoreOverrides=%s", req.reportId, req.sessionId, req.ignoreOverrides)
     try:
-        result = preview_ppt_placeholders(req.reportId, req.sessionId)
+        result = preview_ppt_placeholders(req.reportId, req.sessionId, ignore_overrides=req.ignoreOverrides)
         return result
     except Exception as exc:
         logger.error("preview_placeholders failed: %s\n%s", exc, traceback.format_exc())

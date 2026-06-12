@@ -1184,11 +1184,12 @@ export interface PptPlaceholdersResult {
 export async function fetchPptPlaceholders(
   reportId: string,
   sessionId: string,
+  ignoreOverrides?: boolean,
 ): Promise<PptPlaceholdersResult> {
   const response = await fetch(`${PPT_SERVICE_URL}/preview-placeholders`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ reportId, sessionId }),
+    body: JSON.stringify({ reportId, sessionId, ignoreOverrides: !!ignoreOverrides }),
   });
   if (!response.ok) {
     const err = await response.text().catch(() => '');

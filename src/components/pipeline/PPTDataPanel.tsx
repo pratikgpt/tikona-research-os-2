@@ -273,6 +273,34 @@ export default function PPTDataPanel({
     loadPlaceholders();
   }, [loadPlaceholders]);
 
+  const handleReset = useCallback(async () => {
+    if (!reportId || !serviceAvailable) return;
+    const proceed = window.confirm(
+      'Are you sure you want to reload and reset all placeholders from the report? This will discard your current confirmed overrides and pull fresh copywriting content.'
+    );
+    if (!proceed) return;
+
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const result = await fetchPptPlaceholders(reportId, sessionId, true);
+      const filtered: Record<string, string> = {};
+      for (const [k, v] of Object.entries(result.placeholders)) {
+        if (!EXCLUDED_KEYS.has(k)) {
+          filtered[k] = v != null ? String(v) : '';
+        }
+      }
+      setValues(filtered);
+      setWarnings(result.warnings || []);
+      setConfirmed(false);
+      toast.success('Reset complete! Click "Confirm & Save" below to persist these fresh report values.');
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Failed to reset PPT data');
+    } finally {
+      setLoading(false);
+    }
+  }, [reportId, sessionId, serviceAvailable]);
+
   const handleChange = (key: string, val: string) => {
     setValues(prev => ({ ...prev, [key]: val }));
     setConfirmed(false);
@@ -353,7 +381,7 @@ export default function PPTDataPanel({
           <Button
             size="sm"
             variant="outline"
-            onClick={loadPlaceholders}
+            onClick={handleReset}
             disabled={loading}
             className="h-7 text-xs"
           >

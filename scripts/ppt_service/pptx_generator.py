@@ -1187,15 +1187,18 @@ def map_replacements(company, metadata, fin_model, sections):
         _truncate_words(item, 30, max_len=240)
         for item in business_cards[:6]
     ]
+    # Combine thesis and rationale paragraphs, preventing duplicate insertion 
+    # if both variables resolved to the same underlying section.
+    thesis_parts = []
+    if rationale:
+        thesis_parts.append(rationale)
+    if thesis and thesis != rationale:
+        thesis_parts.append(thesis)
+    if metadata.get("target_price") and metadata.get("cmp"):
+        thesis_parts.append(f"Target price ₹{metadata.get('target_price', '')} versus CMP ₹{metadata.get('cmp', '')} implies {upside_disp} upside.")
+
     thesis_panel_text = _clean_prose(
-        "\n\n".join(
-            part for part in [
-                rationale,
-                thesis,
-                f"Target price ₹{metadata.get('target_price', '')} versus CMP ₹{metadata.get('cmp', '')} implies {upside_disp} upside."
-                if metadata.get("target_price") and metadata.get("cmp") else "",
-            ] if part
-        ),
+        "\n\n".join(thesis_parts),
         max_len=1650,
     )
     company_overview_text = _clean_prose(company.get("description", ""), max_len=1500)
@@ -1578,7 +1581,7 @@ def map_replacements(company, metadata, fin_model, sections):
 
 # ── Placeholder preview (called by /preview-placeholders) ─────────────────────
 
-def preview_ppt_placeholders(report_id: str, session_id: str) -> dict:
+def preview_ppt_placeholders(report_id: str, session_id: str, *, ignore_overrides: bool = False) -> dict:
     """Compute all text placeholder values without generating the PPTX.
 
     Also merges any previously saved overrides from `cs_ppt_data` so the UI
@@ -1597,10 +1600,29 @@ def preview_ppt_placeholders(report_id: str, session_id: str) -> dict:
 
     placeholders = map_replacements(company, metadata, fin_model, sections)
 
+    # Apply slide-specific copy from ppt_content_json if available
+    ppt_copy = session.get("ppt_content_json")
+    if isinstance(ppt_copy, str):
+        try:
+            ppt_copy = json.loads(ppt_copy)
+        except Exception:
+            ppt_copy = None
+    if isinstance(ppt_copy, dict) and ppt_copy:
+        applied = 0
+        for k, v in ppt_copy.items():
+            if v is None:
+                continue
+            value = str(v).strip()
+            if not value:
+                continue
+            placeholders[k] = value
+            applied += 1
+        logger.info("Preview: Applied %d slide-copy values from ppt_content_json", applied)
+
     # Merge previously-saved overrides so the UI shows confirmed values
     saved_raw = report.get("cs_ppt_data") or ""
     has_saved = bool(saved_raw)
-    if saved_raw:
+    if saved_raw and not ignore_overrides:
         try:
             saved = json.loads(saved_raw)
             if isinstance(saved, dict):
@@ -1611,7 +1633,7 @@ def preview_ppt_placeholders(report_id: str, session_id: str) -> dict:
     return {
         "status": "success",
         "placeholders": placeholders,
-        "has_saved_overrides": has_saved,
+        "has_saved_overrides": has_saved if not ignore_overrides else False,
         "warnings": warnings,
     }
 
@@ -1863,21 +1885,30 @@ def _replace_text_in_frame(text_frame, replacements: dict) -> None:
         # python-pptx paragraphs cannot contain newlines, so split and emit one
         # paragraph per line. Blank lines collapse into an empty paragraph.
         lines = full_text.split("\n")
+        
+        # Capture the original paragraph properties (pPr) element before clearing.
+        # It contains bullet styles, indents, levels, and spacing.
+        original_pPr = paragraph._p.pPr
+
         paragraph.clear()
         if not lines:
             return
         _write_paragraph_text(paragraph, lines[0], saved_font, allow_bold=allow_bold)
         from pptx.oxml.ns import qn  # local import to avoid top-level dep noise
         from pptx.text.text import _Paragraph
+        from copy import deepcopy
+
+        current_p = paragraph
         for extra in lines[1:]:
             # Create a sibling <a:p> right after the current paragraph element.
-            # lxml's addnext() returns None, so build the element first and keep
-            # a reference to it before inserting.
-            new_p_el = paragraph._p.makeelement(qn("a:p"), {})
-            paragraph._p.addnext(new_p_el)
+            # Copy original paragraph properties if present to keep formatting/bullets.
+            new_p_el = current_p._p.makeelement(qn("a:p"), {})
+            if original_pPr is not None:
+                new_p_el.append(deepcopy(original_pPr))
+            current_p._p.addnext(new_p_el)
             new_para = _Paragraph(new_p_el, text_frame)
             _write_paragraph_text(new_para, extra, saved_font, allow_bold=allow_bold)
-            paragraph = new_para  # so next iteration inserts after this one
+            current_p = new_para  # so next iteration inserts after this one
 
 
 def _apply_literal_text_subs(slide, subs: list[tuple[str, str]]) -> None:
