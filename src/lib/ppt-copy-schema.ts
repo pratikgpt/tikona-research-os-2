@@ -172,9 +172,9 @@ export function sanitisePptContent(raw: unknown): Record<string, string> {
     let s = String(v);
     // Normalise newlines and whitespace while keeping paragraph breaks intact.
     s = s.replace(/\r\n?/g, '\n')                // CRLF → LF
-         .replace(/[ \t]+/g, ' ')                // collapse runs of spaces
-         .replace(/[ \t]*\n[ \t]*/g, '\n')       // trim around newlines
-         .trim();
+      .replace(/[ \t]+/g, ' ')                // collapse runs of spaces
+      .replace(/[ \t]*\n[ \t]*/g, '\n')       // trim around newlines
+      .trim();
     if (spec.kind === 'bullets') {
       // Strip markdown emphasis but keep the leading bullet marker.
       s = s.replace(/\*\*|__/g, '');
