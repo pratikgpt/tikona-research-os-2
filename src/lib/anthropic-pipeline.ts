@@ -36,7 +36,7 @@ function getClient(): Anthropic {
 }
 
 // Default model for pipeline — Claude Sonnet for speed/cost balance
-const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
 /** Optional prompt overrides from UI prompt editor */
 export interface PromptOverrides {

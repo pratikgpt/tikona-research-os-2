@@ -49,7 +49,7 @@ debugging context, but new work should follow this document.
 
 ### Frontend / orchestration
 - **TypeScript + React (Vite)** — UI lives in [`src/pages/ResearchPipeline.tsx`](../src/pages/ResearchPipeline.tsx) and [`src/components/pipeline/PostProductionPanel.tsx`](../src/components/pipeline/PostProductionPanel.tsx).
-- **Anthropic SDK** (`@anthropic-ai/sdk`) — direct browser calls with `dangerouslyAllowBrowser: true`. Model: `claude-sonnet-4-20250514`.
+- **Anthropic SDK** (`@anthropic-ai/sdk`) — direct browser calls with `dangerouslyAllowBrowser: true`. Model: `claude-sonnet-4-6`.
 - **Supabase JS** — DB + storage CRUD via [`src/lib/supabase.ts`](../src/lib/supabase.ts) and [`src/lib/pipeline-api.ts`](../src/lib/pipeline-api.ts).
 - **Shared schema module** — [`src/lib/ppt-copy-schema.ts`](../src/lib/ppt-copy-schema.ts) is pure (no Vite deps) so the CLI imports it too.
 

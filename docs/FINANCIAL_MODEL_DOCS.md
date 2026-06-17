@@ -111,7 +111,7 @@ Failures are soft-warned — the model still runs with whatever is available.
 
 ### Step 4 — Claude API call (`call_claude_api`)
 
-**Model:** `claude-sonnet-4-20250514`  
+**Model:** `claude-sonnet-4-6`  
 **Tools:** `[{"type": "web_search_20250305", "name": "web_search"}]`  
 **Max tokens:** 16,000  
 **Mode:** Streaming — `client.messages.stream(...).get_final_message()`
@@ -638,7 +638,7 @@ Add a `mk("Sheet Name")` call inside `build_model`, write cells using openpyxl, 
 
 ### Change the Claude model
 
-Update `MODEL_NAME = "claude-sonnet-4-20250514"` at line 47 of `financial_model_v5.py`. The streaming call and web search tool are model-agnostic. Haiku would be too weak for 5-year financial modelling; Opus 4 would work but cost ~5x more.
+Update `MODEL_NAME = "claude-sonnet-4-6"` at line 49 of `financial_model_v5.py`. The streaming call and web search tool are model-agnostic. Haiku would be too weak for 5-year financial modelling; Opus 4 would work but cost ~5x more.
 
 ### Migrate existing tickers to new JSON schema
 

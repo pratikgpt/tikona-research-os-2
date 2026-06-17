@@ -943,6 +943,141 @@ def _upload(client, local: Path, key: str, content_type: str) -> tuple[str, str]
     return key, _strip_qmark(public)
 
 
+def _upload_to_gdrive(local_path: Path, filename: str, folder_id: str) -> dict | None:
+    """Uploads file to Google Drive via n8n webhook upload-document."""
+    import base64
+    import requests
+    import os
+    
+    # n8n webhook URL
+    n8n_base = os.environ.get("N8N_BASE_URL") or "https://n8n.tikonacapital.com/webhook"
+    url = f"{n8n_base.rstrip('/')}/upload-document"
+    
+    try:
+        with open(local_path, "rb") as fh:
+            file_bytes = fh.read()
+        file_base64 = base64.b64encode(file_bytes).decode("utf-8")
+        
+        payload = {
+            "folder_id": folder_id,
+            "file_name": filename,
+            "file_base64": file_base64
+        }
+        
+        logger.info("Uploading %s to Google Drive folder %s", filename, folder_id)
+        res = requests.post(url, json=payload, timeout=60)
+        if res.status_code == 200:
+            data = res.json()
+            # Normalize response format from n8n
+            # Webhook returns { status: "success", file: { id, webViewLink, ... } }
+            if data.get("status") == "success" or "file" in data or "id" in data:
+                file_id = file_info.get("id")
+                slides_url = f"https://docs.google.com/presentation/d/{file_id}/edit"
+                return {
+                    "id": file_id,
+                    "url": slides_url
+                }
+        logger.warning("Upload to Google Drive failed: %s %s", res.status_code, res.text)
+    except Exception as e:
+        logger.error("Error uploading to Google Drive: %s", e)
+    return None
+
+
+def sync_slides_to_pdf(report_id: str, ppt_file_id: str) -> dict:
+    """
+    Triggers n8n convert-to-pdf webhook, downloads the converted PDF from Drive via n8n fetch-vault-pdfs,
+    uploads it to Supabase storage, and updates research_reports.pptx_pdf_file_url.
+    """
+    import requests
+    import base64
+    import time
+    import os
+    from datetime import datetime, timezone
+    
+    client = get_service_client()
+    
+    # 1. Fetch report to get ticker symbol
+    report_res = client.table("research_reports").select("nse_symbol").eq("report_id", report_id).execute()
+    if not report_res.data:
+        raise ValueError(f"Report not found for ID: {report_id}")
+    ticker = (report_res.data[0].get("nse_symbol") or "UNKNOWN").upper()
+    
+    n8n_base = os.environ.get("N8N_BASE_URL") or "https://n8n.tikonacapital.com/webhook"
+    
+    # 2. Trigger convert-to-pdf n8n webhook
+    convert_url = f"{n8n_base.rstrip('/')}/convert-to-pdf"
+    logger.info("Triggering n8n convert-to-pdf for file: %s", ppt_file_id)
+    convert_res = requests.post(convert_url, json={"pptFileId": ppt_file_id}, timeout=180)
+    if convert_res.status_code != 200:
+        raise RuntimeError(f"n8n convert-to-pdf failed ({convert_res.status_code}): {convert_res.text}")
+    
+    # n8n returns the PDF document info (e.g. { id, name, ... })
+    pdf_info = convert_res.json()
+    pdf_file_id = pdf_info.get("id")
+    if not pdf_file_id:
+        if isinstance(pdf_info, list) and pdf_info:
+            pdf_file_id = pdf_info[0].get("id")
+        else:
+            raise RuntimeError(f"Could not find PDF file ID in n8n convert response: {convert_res.text}")
+            
+    logger.info("n8n conversion successful. PDF Drive File ID: %s", pdf_file_id)
+    
+    # 3. Trigger fetch-vault-pdfs to download the PDF binary in base64
+    fetch_url = f"{n8n_base.rstrip('/')}/fetch-vault-pdfs"
+    payload = {
+        "files": [{
+            "id": pdf_file_id,
+            "name": "Report.pdf",
+            "mime_type": "application/pdf"
+        }]
+    }
+    logger.info("Downloading PDF file from Google Drive via fetch-vault-pdfs...")
+    fetch_res = requests.post(fetch_url, json=payload, timeout=180)
+    if fetch_res.status_code != 200:
+        raise RuntimeError(f"n8n fetch-vault-pdfs failed ({fetch_res.status_code}): {fetch_res.text}")
+        
+    fetch_data = fetch_res.json()
+    docs = fetch_data.get("documents") or []
+    if not docs:
+        raise RuntimeError(f"No documents returned by n8n fetch-vault-pdfs: {fetch_res.text}")
+        
+    base64_data = docs[0].get("base64")
+    if not base64_data:
+        raise RuntimeError("Returned document does not contain base64 data")
+        
+    pdf_bytes = base64.b64decode(base64_data)
+    logger.info("Successfully fetched PDF binary (%d bytes)", len(pdf_bytes))
+    
+    # 4. Upload PDF binary to Supabase Storage
+    ts = int(time.time())
+    pdf_key = f"{ticker}/{report_id}/report_{ts}_sync.pdf"
+    
+    client.storage.from_(PPTX_BUCKET).upload(
+        path=pdf_key,
+        file=pdf_bytes,
+        file_options={"content-type": "application/pdf", "upsert": "true"},
+    )
+    public_url_raw = client.storage.from_(PPTX_BUCKET).get_public_url(pdf_key)
+    pdf_url = _strip_qmark(public_url_raw)
+    logger.info("Uploaded synced PDF to Supabase storage: %s", pdf_url)
+    
+    # 5. Update research_reports table
+    now_iso = datetime.now(timezone.utc).isoformat()
+    client.table("research_reports").update({
+        "pptx_pdf_file_path": pdf_key,
+        "pptx_pdf_file_url": pdf_url,
+        "updated_at": now_iso
+    }).eq("report_id", report_id).execute()
+    
+    return {
+        "status": "success",
+        "message": "Slides synced and PDF updated successfully",
+        "pptx_pdf_file_url": pdf_url,
+        "pptx_pdf_file_path": pdf_key
+    }
+
+
+
 # ─────────── orchestrator ─────────────────────────────────────────────────────
 
 def _classify_market_cap(market_cap_raw: str) -> str:
@@ -4970,6 +5105,20 @@ def generate_pptx_for_report(report_id: str, session_id: str, *, use_mock: bool 
         pptx_key = f"{ticker}/{report_id}/report_{ts}.pptx"
         pptx_path_out, pptx_url = _upload(client, Path(result_pptx_path), pptx_key, PPTX_CONTENT_TYPE)
 
+        # Upload copy to Google Drive if vault_folder_id is set
+        vault_folder_id = session.get("vault_folder_id")
+        drive_file_id = None
+        drive_file_url = None
+        if vault_folder_id:
+            gdrive_res = _upload_to_gdrive(Path(result_pptx_path), f"{ticker}_Report_{ts}.pptx", vault_folder_id)
+            if gdrive_res:
+                drive_file_id = gdrive_res.get("id")
+                drive_file_url = gdrive_res.get("url")
+                logger.info("Successfully uploaded PPT to Drive: id=%s url=%s", drive_file_id, drive_file_url)
+                warnings.append("PowerPoint uploaded to Google Drive vault (Google Slides view ready)")
+            else:
+                warnings.append("Failed to upload PowerPoint copy to Google Drive vault")
+
         pdf_path_out: str | None = None
         pdf_url: str | None = None
         
@@ -4982,17 +5131,23 @@ def generate_pptx_for_report(report_id: str, session_id: str, *, use_mock: bool 
 
     # Update DB
     now_iso = datetime.now(timezone.utc).isoformat()
-    client.table("research_reports").update(
-        {
-            "pptx_file_path": pptx_path_out,
-            "pptx_file_url": pptx_url,
-            "pptx_pdf_file_path": pdf_path_out,
-            "pptx_pdf_file_url": pdf_url,
-            "pptx_generated_at": now_iso,
-            "pptx_status": "ready",
-            "updated_at": now_iso,
-        }
-    ).eq("report_id", report_id).execute()
+    db_payload = {
+        "pptx_file_path": pptx_path_out,
+        "pptx_file_url": pptx_url,
+        "pptx_pdf_file_path": pdf_path_out,
+        "pptx_pdf_file_url": pdf_url,
+        "pptx_generated_at": now_iso,
+        "pptx_status": "ready",
+        "updated_at": now_iso,
+    }
+    if drive_file_id:
+        db_payload["drive_file_id"] = drive_file_id
+        db_payload["ppt_file_id"] = drive_file_id
+    if drive_file_url:
+        db_payload["drive_file_url"] = drive_file_url
+        db_payload["ppt_file_url"] = drive_file_url
+
+    client.table("research_reports").update(db_payload).eq("report_id", report_id).execute()
 
     duration = round(time.time() - t0, 2)
     logger.info("generate_pptx done report=%s duration=%.2fs", report_id, duration)
@@ -5004,6 +5159,8 @@ def generate_pptx_for_report(report_id: str, session_id: str, *, use_mock: bool 
         "pptx_file_path": pptx_path_out,
         "pptx_pdf_file_url": pdf_url,
         "pptx_pdf_file_path": pdf_path_out,
+        "ppt_file_id": drive_file_id,
+        "ppt_file_url": drive_file_url,
         "duration_seconds": duration,
         "warnings": warnings,
     }

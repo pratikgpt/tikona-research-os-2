@@ -2,7 +2,7 @@
 ═══════════════════════════════════════════════════════════════════
  TIKONA CAPITAL — Financial Model Generator v5.1
 ═══════════════════════════════════════════════════════════════════
- Model:    claude-sonnet-4-20250514 (Claude Sonnet 4) + web_search
+ Model:    claude-sonnet-4-6 (Claude Sonnet 4.6) + web_search
  Changes:  Year-agnostic prompt, formula-based Excel, cost tracking
  Output:   Screener Excel + 8 appended model sheets (all formulas)
 
@@ -46,7 +46,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s")
 logger = logging.getLogger(__name__)
 
 __version__ = "5.1.0"
-MODEL_NAME = "claude-sonnet-4-20250514"
+MODEL_NAME = "claude-sonnet-4-6"
 WEB_SEARCH_TOOL = [{"type": "web_search_20250305", "name": "web_search"}]
 
 PER_YEAR_ASSUMPTION_KEYS = [

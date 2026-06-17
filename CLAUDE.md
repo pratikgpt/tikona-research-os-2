@@ -8,7 +8,7 @@ Repository guide for the AI-powered equity research platform. The flagship featu
 
 - **Frontend:** Vite + React + TypeScript, TailwindCSS, Radix UI, React Query, Sonner toasts.
 - **Backend-as-a-Service:** Supabase (Postgres + Auth + Storage). All DB access goes through `src/lib/supabase.ts`.
-- **LLM provider:** Anthropic SDK (`@anthropic-ai/sdk`) called **directly from the browser** with `dangerouslyAllowBrowser: true` and `VITE_ANTHROPIC_API_KEY`. Default model: `claude-sonnet-4-20250514`. Vault summarization uses Haiku (`claude-haiku-4-5-20251001`).
+- **LLM provider:** Anthropic SDK (`@anthropic-ai/sdk`) called **directly from the browser** with `dangerouslyAllowBrowser: true` and `VITE_ANTHROPIC_API_KEY`. Default model: `claude-sonnet-4-6`. Vault summarization uses Haiku (`claude-haiku-4-5-20251001`).
 - **Web search:** Anthropic native `web_search_20250305` tool (max 20 uses per call). All Stage 0/1/2 calls use streaming (`client.messages.stream`) to avoid the 10-minute API timeout.
 - **External services (n8n at `https://n8n.tikonacapital.com`):**
   - `POST /webhook/create-folder` — creates the Google Drive vault, returns Drive files.

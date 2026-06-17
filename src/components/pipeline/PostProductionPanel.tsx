@@ -15,6 +15,7 @@ import {
   createResearchReport,
   publishReport,
   generatePptx,
+  syncSlidesToPdf,
   PPT_SERVICE_URL,
 } from '@/lib/api';
 import { runPptCopywriting } from '@/lib/anthropic-pipeline';
@@ -76,6 +77,9 @@ export default function PostProductionPanel({
   const [pptxElapsedSeconds, setPptxElapsedSeconds] = useState(0);
   const [pptxFileUrl, setPptxFileUrl] = useState<string | null>(null);
   const [pptxPdfFileUrl, setPptxPdfFileUrl] = useState<string | null>(null);
+  const [pptFileId, setPptFileId] = useState<string | null>(null);
+  const [pptFileUrl, setPptFileUrl] = useState<string | null>(null);
+  const [slidesSyncing, setSlidesSyncing] = useState(false);
   const [useMock, setUseMock] = useState(false);
   const pptxTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -170,6 +174,8 @@ export default function PostProductionPanel({
     setReportId(report.report_id);
     if (report.pptx_file_url) setPptxFileUrl(report.pptx_file_url);
     if (report.pptx_pdf_file_url) setPptxPdfFileUrl(report.pptx_pdf_file_url);
+    if (report.ppt_file_id) setPptFileId(report.ppt_file_id);
+    if (report.ppt_file_url) setPptFileUrl(report.ppt_file_url);
     if (report.podcast_script) setPodcastScript(report.podcast_script);
     if (report.audio_file_url) setAudioFileUrl(report.audio_file_url);
     if (report.video_file_url) setVideoFileUrl(report.video_file_url);
@@ -337,6 +343,8 @@ export default function PostProductionPanel({
 
       setPptxFileUrl(result.pptx_file_url);
       setPptxPdfFileUrl(result.pptx_pdf_file_url ?? null);
+      setPptFileId(result.ppt_file_id ?? null);
+      setPptFileUrl(result.ppt_file_url ?? null);
 
       await supabase
         .from('research_reports')
@@ -355,6 +363,41 @@ export default function PostProductionPanel({
       setPptxGenerating(false);
     }
   }, [reportId, sessionId, useMock, slideCopyReady, handleGenerateSlideCopy, financialModelFileUrl]);
+
+  // ========================
+  // Step 1b: Sync Google Slides & Update PDF
+  // ========================
+
+  const handleSyncSlides = useCallback(async () => {
+    if (!reportId) {
+      toast.error('No report found to sync.');
+      return;
+    }
+    if (!pptFileId) {
+      toast.error('No Google Slides ID found for this session. Generate PPTX first.');
+      return;
+    }
+
+    setSlidesSyncing(true);
+    try {
+      toast.info('Syncing Google Slides changes and exporting to PDF (may take ~10-15s)...');
+      const result = await syncSlidesToPdf({
+        reportId,
+        pptFileId,
+      });
+
+      if (result.status === 'success' && result.pptx_pdf_file_url) {
+        setPptxPdfFileUrl(result.pptx_pdf_file_url);
+        toast.success('Google Slides successfully synced! PDF preview updated.');
+      } else {
+        throw new Error(result.message || 'Sync failed');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to sync Google Slides');
+    } finally {
+      setSlidesSyncing(false);
+    }
+  }, [reportId, pptFileId]);
 
   // ========================
   // Step 2: Podcast
@@ -763,6 +806,30 @@ export default function PostProductionPanel({
                   >
                     <ExternalLink className="h-3.5 w-3.5" /> View PDF
                   </a>
+                )}
+                {pptFileUrl && (
+                  <a
+                    href={pptFileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-xs font-medium h-8 px-3 transition-colors"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" /> Edit in Google Slides
+                  </a>
+                )}
+                {pptFileId && (
+                  <Button
+                    onClick={handleSyncSlides}
+                    disabled={slidesSyncing || pptxGenerating || isAnyGenerating}
+                    size="sm"
+                    className="h-8 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium px-3"
+                  >
+                    {slidesSyncing ? (
+                      <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Syncing Slides...</>
+                    ) : (
+                      <><RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Sync Slides & Update PDF</>
+                    )}
+                  </Button>
                 )}
                 <Button
                   onClick={handleGeneratePptx}

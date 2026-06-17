@@ -41,7 +41,7 @@ from pydantic import BaseModel
 import uvicorn
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from pptx_generator import generate_pptx_for_report, preview_ppt_placeholders
+from pptx_generator import generate_pptx_for_report, preview_ppt_placeholders, sync_slides_to_pdf
 
 logging.basicConfig(
     level=logging.INFO,
@@ -82,6 +82,11 @@ class PreviewPlaceholdersRequest(BaseModel):
     ignoreOverrides: bool = False
 
 
+class SyncSlidesRequest(BaseModel):
+    reportId: str
+    pptFileId: str
+
+
 class GeneratePptxResponse(BaseModel):
     status: str
     message: str
@@ -89,6 +94,8 @@ class GeneratePptxResponse(BaseModel):
     pptx_file_path: str
     pptx_pdf_file_url: str | None = None
     pptx_pdf_file_path: str | None = None
+    ppt_file_id: str | None = None
+    ppt_file_url: str | None = None
     duration_seconds: float
     warnings: list[str] = []
 
@@ -137,6 +144,24 @@ def generate_pptx(req: GeneratePptxRequest):
                 "duration_seconds": duration,
             },
         )
+@app.post("/sync-slides-pdf")
+def sync_slides(req: SyncSlidesRequest):
+    logger.info("POST /sync-slides-pdf report=%s pptFileId=%s", req.reportId, req.pptFileId)
+    try:
+        result = sync_slides_to_pdf(req.reportId, req.pptFileId)
+        return result
+    except Exception as exc:
+        logger.error("sync_slides failed: %s\n%s", exc, traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": str(exc)[:500],
+            },
+        )
+
+
+
 
 
 # ── entrypoint ─────────────────────────────────────────────────────────────

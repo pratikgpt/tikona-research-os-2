@@ -1170,6 +1170,8 @@ export interface GeneratePptxResult {
   pptx_file_path?: string | null;
   pptx_pdf_file_url?: string | null;
   pptx_pdf_file_path?: string | null;
+  ppt_file_id?: string | null;
+  ppt_file_url?: string | null;
   duration_seconds?: number | null;
   warnings?: string[] | null;
 }
@@ -1241,4 +1243,43 @@ export async function generatePptx(
   }
 
   return (await response.json()) as GeneratePptxResult;
+}
+
+export interface SyncSlidesInput {
+  reportId: string;
+  pptFileId: string;
+}
+
+export interface SyncSlidesResult {
+  status: string;
+  message: string;
+  pptx_pdf_file_url: string;
+  pptx_pdf_file_path: string;
+}
+
+export async function syncSlidesToPdf(
+  input: SyncSlidesInput,
+): Promise<SyncSlidesResult> {
+  const response = await fetch(`${PPT_SERVICE_URL}/sync-slides-pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      reportId: input.reportId,
+      pptFileId: input.pptFileId,
+    }),
+  });
+
+  if (!response.ok) {
+    let detail = '';
+    const cloned = response.clone();
+    try {
+      const body = (await response.json()) as { message?: string };
+      detail = body?.message ?? '';
+    } catch {
+      detail = (await cloned.text()).slice(0, 300);
+    }
+    throw new Error(`Sync slides to PDF failed: ${response.status} ${detail}`);
+  }
+
+  return (await response.json()) as SyncSlidesResult;
 }
