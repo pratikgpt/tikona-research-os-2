@@ -178,6 +178,12 @@ async function callAnthropicWithSearch(options: AnthropicCallOptions): Promise<A
   const combinedTools = [...baseTools, ...mcpTools];
   const passedTools = combinedTools.length > 0 ? combinedTools : undefined;
 
+  // Append MCP guidelines to the system prompt dynamically if MCP tools are loaded
+  let finalSystemPrompt = systemPrompt;
+  if (mcpTools.length > 0) {
+    finalSystemPrompt += `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nGO INDIA STOCKS DATA INSTRUCTION — HIGH PRIORITY\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n- You have access to official Go India Stocks data tools.\n- For all company financial information, actual earnings numbers, balance sheets, segment performance, and projections, prioritize calling the Go India Stocks MCP tools.\n- This ensures the data in the report is 100% authentic and accurate. Do not rely on web search for these figures if the MCP tools can provide them.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  }
+
   let currentMessages: Anthropic.Messages.MessageParam[] = [
     { role: 'user', content: userPrompt }
   ];
@@ -199,7 +205,7 @@ async function callAnthropicWithSearch(options: AnthropicCallOptions): Promise<A
         model,
         max_tokens: maxTokens,
         temperature,
-        system: systemPrompt,
+        system: finalSystemPrompt,
         tools: passedTools,
         messages: currentMessages,
       });
