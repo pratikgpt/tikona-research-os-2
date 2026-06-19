@@ -18,12 +18,14 @@ import {
   sanitisePptContent,
   type PptCopyMetadata,
 } from '@/lib/ppt-copy-schema';
+import { SSEMCPClient } from './mcp-client';
 
 // ========================
 // Anthropic Client
 // ========================
 
 const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
+const GOINDIA_MCP_URL = import.meta.env.VITE_GOINDIA_MCP_URL;
 
 function getClient(): Anthropic {
   if (!ANTHROPIC_API_KEY) {
@@ -147,55 +149,159 @@ async function callAnthropicWithSearch(options: AnthropicCallOptions): Promise<A
     useWebSearch = true,
   } = options;
 
-  const tools: Anthropic.Tool[] = useWebSearch
+  const baseTools: Anthropic.Tool[] = useWebSearch
     ? [{ type: 'web_search_20250305' as const, name: 'web_search', max_uses: 20 } as unknown as Anthropic.Tool]
     : [];
 
-  // Use streaming to avoid Anthropic's 10-minute timeout on long requests.
-  // .stream() keeps the connection alive via SSE events, then .finalMessage()
-  // awaits the complete response. This is required for requests that involve
-  // web search + large output (e.g., Stage 2 with 32K tokens).
-  const stream = client.messages.stream({
-    model,
-    max_tokens: maxTokens,
-    temperature,
-    system: systemPrompt,
-    tools,
-    messages: [{ role: 'user', content: userPrompt }],
-  });
+  let mcpClient: SSEMCPClient | null = null;
+  let mcpTools: Anthropic.Tool[] = [];
 
-  const response = await stream.finalMessage();
-
-  // Extract text and citations from the response
-  let text = '';
-  const citations: string[] = [];
-
-  for (const block of response.content) {
-    if (block.type === 'text') {
-      text += block.text;
-      // Extract citations if present
-      if ('citations' in block && Array.isArray(block.citations)) {
-        for (const cite of block.citations) {
-          if ('url' in cite && typeof cite.url === 'string') {
-            citations.push(cite.url);
-          }
-        }
+  // Connect to Go India Stocks MCP server if URL is configured
+  if (GOINDIA_MCP_URL) {
+    try {
+      mcpClient = new SSEMCPClient(GOINDIA_MCP_URL);
+      await mcpClient.connect(15000);
+      const mcpResult = await mcpClient.listTools();
+      if (mcpResult?.tools && Array.isArray(mcpResult.tools)) {
+        console.log(`[MCP] Discovered ${mcpResult.tools.length} tools from Go India Stocks MCP server`);
+        mcpTools = mcpResult.tools.map((t: any) => ({
+          name: t.name,
+          description: t.description || '',
+          input_schema: t.inputSchema || { type: 'object', properties: {} },
+        }));
       }
+    } catch (err) {
+      console.warn('[MCP] Failed to connect/initialize MCP server:', err);
     }
   }
 
-  const tokensUsed = (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
+  const combinedTools = [...baseTools, ...mcpTools];
+  const passedTools = combinedTools.length > 0 ? combinedTools : undefined;
+
+  let currentMessages: Anthropic.Messages.MessageParam[] = [
+    { role: 'user', content: userPrompt }
+  ];
+
+  let accumulatedText = '';
+  const citations: string[] = [];
+  let totalTokensUsed = 0;
+  
+  let loopCount = 0;
+  const maxLoops = 10;
+
+  try {
+    while (loopCount < maxLoops) {
+      loopCount++;
+      console.log(`[Anthropic Pipeline] Sending message to Claude (turn ${loopCount})...`);
+
+      // Use streaming to avoid Anthropic's 10-minute timeout on long requests.
+      const stream = client.messages.stream({
+        model,
+        max_tokens: maxTokens,
+        temperature,
+        system: systemPrompt,
+        tools: passedTools,
+        messages: currentMessages,
+      });
+
+      const response = await stream.finalMessage();
+
+      // Accumulate tokens
+      totalTokensUsed += (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
+
+      // Extract text and citations from the response
+      let responseText = '';
+      for (const block of response.content) {
+        if (block.type === 'text') {
+          responseText += block.text;
+          // Extract citations if present
+          if ('citations' in block && Array.isArray(block.citations)) {
+            for (const cite of block.citations) {
+              if ('url' in cite && typeof cite.url === 'string') {
+                citations.push(cite.url);
+              }
+            }
+          }
+        }
+      }
+
+      accumulatedText += responseText;
+
+      // Add assistant's response to history
+      currentMessages.push({ role: 'assistant', content: response.content });
+
+      if (response.stop_reason !== 'tool_use') {
+        break;
+      }
+
+      // Find tool calls
+      const toolUseBlocks = response.content.filter(
+        (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use'
+      );
+
+      if (toolUseBlocks.length === 0) {
+        break;
+      }
+
+      // Execute custom MCP tools
+      console.log(`[Anthropic Pipeline] Claude requested tool use:`, toolUseBlocks.map(b => b.name));
+
+      const toolResults = await Promise.all(
+        toolUseBlocks.map(async (toolUse) => {
+          const isMcpTool = mcpTools.some(t => t.name === toolUse.name);
+          if (isMcpTool && mcpClient) {
+            try {
+              console.log(`[MCP] Calling tool ${toolUse.name} via Go India Stocks MCP client with args:`, toolUse.input);
+              const mcpResult = await mcpClient.callTool(toolUse.name, toolUse.input);
+              const contentString = mcpResult.content
+                .filter((c: any) => c.type === 'text')
+                .map((c: any) => c.text)
+                .join('\n');
+              return {
+                type: 'tool_result' as const,
+                tool_use_id: toolUse.id,
+                content: contentString || JSON.stringify(mcpResult),
+              };
+            } catch (err) {
+              console.error(`[MCP] Tool call failed for ${toolUse.name}:`, err);
+              return {
+                type: 'tool_result' as const,
+                tool_use_id: toolUse.id,
+                content: `Error executing tool: ${err instanceof Error ? err.message : String(err)}`,
+                is_error: true,
+              };
+            }
+          } else {
+            return {
+              type: 'tool_result' as const,
+              tool_use_id: toolUse.id,
+              content: `Error: Unknown or unhandled tool ${toolUse.name}`,
+              is_error: true,
+            };
+          }
+        })
+      );
+
+      // Append tool results to history for next turn
+      currentMessages.push({ role: 'user', content: toolResults });
+    }
+  } finally {
+    // Clean up connection
+    if (mcpClient) {
+      mcpClient.close();
+    }
+  }
 
   // Debug: log raw response for inspection in browser console
   console.group('[Anthropic Pipeline] Raw Response');
-  console.log('Tokens used:', tokensUsed);
+  console.log('Tokens used:', totalTokensUsed);
   console.log('Citations:', [...new Set(citations)]);
   console.log('--- RAW TEXT START ---');
-  console.log(text);
+  console.log(accumulatedText);
   console.log('--- RAW TEXT END ---');
   console.groupEnd();
 
-  return { text, tokensUsed, citations: [...new Set(citations)] };
+  return { text: accumulatedText, tokensUsed: totalTokensUsed, citations: [...new Set(citations)] };
 }
 
 async function getFinancialModelPromptContext(sessionId?: string): Promise<FinancialModelPromptContext> {

@@ -22,6 +22,12 @@ export default defineConfig({
         timeout: 900000,      // 15 minutes timeout
         proxyTimeout: 900000 // 15 minutes proxy timeout
       },
+      '/proxy/goindia': {
+        target: 'https://goindia-mcp.fly.dev',
+        rewrite: (p) => p.replace(/^\/proxy\/goindia/, ''),
+        changeOrigin: true,
+        secure: true
+      },
     },
   },
   build: {

@@ -6,6 +6,7 @@
     { "source": "/proxy/n8n/:path*", "destination": "https://n8n.tikonacapital.com/:path*" },
     { "source": "/proxy/ppt/:path*", "destination": "http://72.61.226.16:8501/:path*" },
     { "source": "/proxy/fm/:path*",  "destination": "http://72.61.226.16:8500/:path*" },
+    { "source": "/proxy/goindia/:path*", "destination": "https://goindia-mcp.fly.dev/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
