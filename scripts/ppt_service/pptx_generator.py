@@ -971,6 +971,9 @@ def _upload_to_gdrive(local_path: Path, filename: str, folder_id: str) -> dict |
             # Normalize response format from n8n
             # Webhook returns { status: "success", file: { id, webViewLink, ... } }
             if data.get("status") == "success" or "file" in data or "id" in data:
+                file_info = data.get("file", data)
+                if isinstance(file_info, list) and len(file_info) > 0:
+                    file_info = file_info[0]
                 file_id = file_info.get("id")
                 slides_url = f"https://docs.google.com/presentation/d/{file_id}/edit"
                 return {

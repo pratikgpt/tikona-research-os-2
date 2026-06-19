@@ -40,6 +40,7 @@ import {
   WifiOff,
   RefreshCw,
   FileEdit,
+  FileText,
 } from 'lucide-react';
 import PPTDataPanel from './PPTDataPanel';
 
@@ -81,6 +82,7 @@ export default function PostProductionPanel({
   const [pptFileUrl, setPptFileUrl] = useState<string | null>(null);
   const [slidesSyncing, setSlidesSyncing] = useState(false);
   const [useMock, setUseMock] = useState(false);
+  const [previewTab, setPreviewTab] = useState<'pdf' | 'slides'>('pdf');
   const pptxTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // --- PPT copywriting pass (slide-specific copy) ---
@@ -388,6 +390,7 @@ export default function PostProductionPanel({
 
       if (result.status === 'success' && result.pptx_pdf_file_url) {
         setPptxPdfFileUrl(result.pptx_pdf_file_url);
+        setPreviewTab('pdf');
         toast.success('Google Slides successfully synced! PDF preview updated.');
       } else {
         throw new Error(result.message || 'Sync failed');
@@ -846,22 +849,76 @@ export default function PostProductionPanel({
                 </Button>
               </div>
 
-              {pptxPdfFileUrl ? (
-                <iframe
-                  key={pptxPdfFileUrl}
-                  src={pptxPdfFileUrl}
-                  title={`${companyName} report preview`}
-                  className="w-full rounded-lg border border-neutral-200 bg-white"
-                  style={{ height: '520px' }}
-                />
+              {pptFileId && (
+                <div className="flex border-b border-neutral-200 mb-3 bg-neutral-50/50 rounded-t-lg p-1 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTab('pdf')}
+                    className={cn(
+                      'px-4 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 rounded-md',
+                      previewTab === 'pdf'
+                        ? 'border-accent-600 text-accent-700 bg-white shadow-sm'
+                        : 'border-transparent text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100/50'
+                    )}
+                  >
+                    <FileText className="h-3.5 w-3.5" /> PDF Preview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTab('slides')}
+                    className={cn(
+                      'px-4 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 rounded-md',
+                      previewTab === 'slides'
+                        ? 'border-accent-600 text-accent-700 bg-white shadow-sm'
+                        : 'border-transparent text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100/50'
+                    )}
+                  >
+                    <Presentation className="h-3.5 w-3.5" /> Google Slides Editor
+                  </button>
+                </div>
+              )}
+
+              {previewTab === 'slides' && pptFileId ? (
+                <div className="space-y-3">
+                  <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-lg flex items-start gap-2.5">
+                    <span className="text-blue-700 shrink-0 text-sm font-semibold mt-0.5">💡</span>
+                    <div className="text-xs text-blue-800 leading-normal">
+                      <p className="font-semibold">Visual Editing Mode</p>
+                      <p className="mt-0.5">
+                        You can visually edit the presentation deck directly inside the workspace below. Changes are saved automatically.
+                        Once you're done, click the <strong className="text-indigo-700 font-semibold">Sync Slides & Update PDF</strong> button above to re-compile your changes into the final PDF.
+                      </p>
+                    </div>
+                  </div>
+                  <iframe
+                    key={pptFileId}
+                    src={`https://docs.google.com/presentation/d/${pptFileId}/edit?usp=drivesdk`}
+                    title={`${companyName} Google Slides Editor`}
+                    className="w-full rounded-lg border border-neutral-200 bg-white"
+                    style={{ height: '600px' }}
+                    allowFullScreen
+                  />
+                </div>
               ) : (
-                <iframe
-                  key={pptxFileUrl}
-                  src={`https://docs.google.com/viewer?url=${encodeURIComponent(pptxFileUrl)}&embedded=true`}
-                  title={`${companyName} report preview`}
-                  className="w-full rounded-lg border border-neutral-200 bg-white"
-                  style={{ height: '520px' }}
-                />
+                <>
+                  {pptxPdfFileUrl ? (
+                    <iframe
+                      key={pptxPdfFileUrl}
+                      src={pptxPdfFileUrl}
+                      title={`${companyName} report preview`}
+                      className="w-full rounded-lg border border-neutral-200 bg-white"
+                      style={{ height: '520px' }}
+                    />
+                  ) : (
+                    <iframe
+                      key={pptxFileUrl}
+                      src={`https://docs.google.com/viewer?url=${encodeURIComponent(pptxFileUrl || '')}&embedded=true`}
+                      title={`${companyName} report preview`}
+                      className="w-full rounded-lg border border-neutral-200 bg-white"
+                      style={{ height: '520px' }}
+                    />
+                  )}
+                </>
               )}
             </div>
           )}
