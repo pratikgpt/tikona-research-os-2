@@ -213,6 +213,99 @@ class CostTracker:
 
 
 # ══════════════════════════════════════════════════════════════════
+# MODEL CONTEXT PROTOCOL (MCP) CLIENT
+# ══════════════════════════════════════════════════════════════════
+class PythonSSEMCPClient:
+    """
+    Lightweight, synchronous MCP SSE Client for Python.
+    Connects to SSE endpoint, parses the message POST endpoint from the handshake,
+    and handles tool listing/calling over JSON-RPC.
+    """
+    def __init__(self, sse_url: str):
+        self.sse_url = sse_url
+        self.post_url = None
+        self.session = req_lib.Session()
+        self.stream_response = None
+        self.lines_iterator = None
+
+    def connect(self, timeout_seconds: int = 15):
+        logger.info(f"[MCP] Connecting to SSE server: {self.sse_url}")
+        self.stream_response = self.session.get(self.sse_url, stream=True, timeout=timeout_seconds)
+        self.lines_iterator = self.stream_response.iter_lines()
+
+        # Read lines until we find the initial endpoint event
+        event_type = None
+        for line in self.lines_iterator:
+            if not line:
+                continue
+            line_str = line.decode("utf-8").strip()
+            if line_str.startswith("event:"):
+                event_type = line_str.replace("event:", "").strip()
+            elif line_str.startswith("data:"):
+                data = line_str.replace("data:", "").strip()
+                if event_type == "endpoint":
+                    from urllib.parse import urljoin
+                    # Resolve message/POST endpoint
+                    self.post_url = urljoin(self.sse_url, data)
+                    logger.info(f"[MCP] Resolved POST message endpoint: {self.post_url}")
+                    return
+        raise RuntimeError("MCP handshake failed: 'endpoint' event not received from server")
+
+    def send_request(self, method: str, params: dict | None = None, timeout_seconds: int = 30) -> Any:
+        if not self.post_url:
+            raise RuntimeError("MCP client is not connected")
+
+        req_id = int(time.time() * 1000)
+        body = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params or {},
+            "id": req_id
+        }
+
+        # Transmit JSON-RPC request to POST endpoint
+        resp = self.session.post(self.post_url, json=body, timeout=timeout_seconds)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"MCP POST failed: {resp.status_code} {resp.text}")
+
+        # Scan SSE stream for response matching our request ID
+        event_type = None
+        for line in self.lines_iterator:
+            if not line:
+                continue
+            line_str = line.decode("utf-8").strip()
+            if line_str.startswith("event:"):
+                event_type = line_str.replace("event:", "").strip()
+            elif line_str.startswith("data:"):
+                data = line_str.replace("data:", "").strip()
+                if event_type == "message":
+                    try:
+                        msg = json.loads(data)
+                        if msg.get("id") == req_id:
+                            if "error" in msg:
+                                raise RuntimeError(f"MCP server error: {msg['error']}")
+                            return msg.get("result")
+                    except json.JSONDecodeError:
+                         pass
+        raise RuntimeError("MCP SSE stream disconnected before receiving response")
+
+    def list_tools(self) -> dict:
+        return self.send_request("tools/list")
+
+    def call_tool(self, name: str, arguments: dict) -> dict:
+        return self.send_request("tools/call", {"name": name, "arguments": arguments})
+
+    def close(self):
+        logger.info("[MCP] Closing SSE connection")
+        if self.stream_response:
+            try:
+                self.stream_response.close()
+            except Exception:
+                pass
+            self.stream_response = None
+
+
+# ══════════════════════════════════════════════════════════════════
 # STYLES
 # ══════════════════════════════════════════════════════════════════
 COLORS = {
@@ -1245,16 +1338,120 @@ Return ONLY valid JSON. Start with {{ end with }}. No prose, no markdown fences.
 }}"""
 
     logger.info(f"🤖 Calling Claude API ({MODEL_NAME}) with web_search...")
-    with client.messages.stream(
-        model=MODEL_NAME,
-        max_tokens=16000,
-        messages=[{"role": "user", "content": prompt}],
-        tools=WEB_SEARCH_TOOL,
-    ) as stream:
-        response = stream.get_final_message()
 
-    tracker.track(response)
-    raw = "".join(b.text for b in response.content if hasattr(b, "text") and b.text)
+    goindia_mcp_url = os.environ.get("VITE_GOINDIA_MCP_URL")
+    mcp_client = None
+    mcp_tools = []
+
+    if goindia_mcp_url:
+        try:
+            mcp_client = PythonSSEMCPClient(goindia_mcp_url)
+            mcp_client.connect(timeout_seconds=15)
+            mcp_result = mcp_client.list_tools()
+            if mcp_result and isinstance(mcp_result.get("tools"), list):
+                logger.info(f"[MCP] Connected. Discovered {len(mcp_result['tools'])} tools from Go India Stocks MCP server.")
+                for t in mcp_result["tools"]:
+                    mcp_tools.append({
+                        "name": t["name"],
+                        "description": t.get("description", ""),
+                        "input_schema": t.get("inputSchema") or {"type": "object", "properties": {}}
+                    })
+        except Exception as err:
+            logger.warning(f"[MCP] Failed to connect or fetch tools from Go India Stocks MCP server: {err}")
+            if mcp_client:
+                mcp_client.close()
+                mcp_client = None
+
+    combined_tools = []
+    combined_tools.extend(WEB_SEARCH_TOOL)
+    combined_tools.extend(mcp_tools)
+
+    final_prompt = prompt
+    if mcp_tools:
+        mcp_instruction = (
+            "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "GO INDIA STOCKS DATA INSTRUCTION — HIGH PRIORITY\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "- You have access to official Go India Stocks data tools.\n"
+            "- For all company financial information, actual earnings numbers, balance sheets, segment performance, and projections, prioritize calling the Go India Stocks MCP tools.\n"
+            "- This ensures the data in the report is 100% authentic and accurate. Do not rely on web search for these figures if the MCP tools can provide them.\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        )
+        final_prompt = mcp_instruction + prompt
+
+    messages = [{"role": "user", "content": final_prompt}]
+    loop_count = 0
+    max_loops = 10
+    raw = ""
+
+    try:
+        while loop_count < max_loops:
+            loop_count += 1
+            logger.info(f"[Assumptions Generator] Calling Claude API (turn {loop_count})...")
+            
+            with client.messages.stream(
+                model=MODEL_NAME,
+                max_tokens=16000,
+                system="You are a senior equity research analyst building a complete financial model. Return ONLY valid JSON.",
+                messages=messages,
+                tools=combined_tools,
+            ) as stream:
+                response = stream.get_final_message()
+
+            tracker.track(response)
+
+            # Append assistant response to history
+            messages.append({"role": "assistant", "content": response.content})
+
+            if response.stop_reason != "tool_use":
+                raw = "".join(b.text for b in response.content if hasattr(b, "text") and b.text)
+                break
+
+            # Find tool use blocks
+            tool_uses = [b for b in response.content if b.type == "tool_use"]
+            if not tool_uses:
+                raw = "".join(b.text for b in response.content if hasattr(b, "text") and b.text)
+                break
+
+            logger.info(f"[Assumptions Generator] Claude requested tool use: {[tu.name for tu in tool_uses]}")
+            tool_results = []
+            
+            for tu in tool_uses:
+                is_mcp = any(t["name"] == tu.name for t in mcp_tools)
+                if is_mcp and mcp_client:
+                    try:
+                        logger.info(f"[MCP] Calling tool {tu.name} with arguments: {tu.input}")
+                        mcp_res = mcp_client.call_tool(tu.name, tu.input)
+                        content_str = "\n".join(
+                            c["text"] for c in mcp_res.get("content", []) if c.get("type") == "text"
+                        )
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": tu.id,
+                            "content": content_str or json.dumps(mcp_res)
+                        })
+                    except Exception as err:
+                        logger.error(f"[MCP] Failed to call tool {tu.name}: {err}")
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": tu.id,
+                            "content": f"Error: {err}",
+                            "is_error": True
+                        })
+                else:
+                    # Built-in or other tool (web_search is executed by Anthropic server automatically)
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tu.id,
+                        "content": f"Error: Unknown tool {tu.name}",
+                        "is_error": True
+                    })
+
+            messages.append({"role": "user", "content": tool_results})
+            
+    finally:
+        if mcp_client:
+            mcp_client.close()
 
     logger.info(
         f"✅ Claude done | Tokens: in={tracker.total_input_tokens:,} out={tracker.total_output_tokens:,}"
