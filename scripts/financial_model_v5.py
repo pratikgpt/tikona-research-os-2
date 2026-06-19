@@ -248,8 +248,24 @@ class PythonSSEMCPClient:
                     # Resolve message/POST endpoint
                     self.post_url = urljoin(self.sse_url, data)
                     logger.info(f"[MCP] Resolved POST message endpoint: {self.post_url}")
+                    # Perform standard MCP initialize handshake
+                    self._initialize_handshake(timeout_seconds)
                     return
         raise RuntimeError("MCP handshake failed: 'endpoint' event not received from server")
+
+    def _initialize_handshake(self, timeout_seconds: int = 15):
+        """Send the standard MCP initialize request + notifications/initialized notification."""
+        init_result = self.send_request("initialize", {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "tikona-fm-client", "version": __version__}
+        }, timeout_seconds=timeout_seconds)
+        logger.info(f"[MCP] Initialized: server={init_result.get('serverInfo', {}).get('name', '?')}")
+        # Send initialized notification (fire-and-forget, no id / no response expected)
+        self.session.post(self.post_url, json={
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        }, timeout=timeout_seconds)
 
     def send_request(self, method: str, params: dict | None = None, timeout_seconds: int = 30) -> Any:
         if not self.post_url:
@@ -629,17 +645,17 @@ class Projections(BaseModel):
 
 class HistoricalRatios(BaseModel):
     years: list[str]
-    ebitda_margin_pct: list[float]
-    pat_margin_pct: list[float]
-    roe_pct: list[float]
-    roce_pct: list[float]
-    debt_equity: list[float]
-    receivable_days: list[float]
-    inventory_days: list[float]
-    asset_turnover: list[float]
-    rm_pct: list[float]
-    employee_pct: list[float]
-    tax_rate_pct: list[float]
+    ebitda_margin_pct: list[Optional[float]]
+    pat_margin_pct: list[Optional[float]]
+    roe_pct: list[Optional[float]]
+    roce_pct: list[Optional[float]]
+    debt_equity: list[Optional[float]]
+    receivable_days: list[Optional[float]]
+    inventory_days: list[Optional[float]]
+    asset_turnover: list[Optional[float]]
+    rm_pct: list[Optional[float]]
+    employee_pct: list[Optional[float]]
+    tax_rate_pct: list[Optional[float]]
     # Derived in _embed_historical_valuation_ratios() from screener price history +
     # historical EPS / EBITDA. Optional so legacy JSONs without these fields keep
     # validating cleanly. Inner Optional[float] supports None gaps where EPS/EBITDA
@@ -720,10 +736,10 @@ class BoardMember(BaseModel):
 
 class Shareholding(BaseModel):
     years: list[str] = Field(default_factory=list)
-    promoter_pct: list[float] = Field(default_factory=list)
-    fii_pct: list[float] = Field(default_factory=list)
-    dii_pct: list[float] = Field(default_factory=list)
-    public_pct: list[float] = Field(default_factory=list)
+    promoter_pct: list[Optional[float]] = Field(default_factory=list)
+    fii_pct: list[Optional[float]] = Field(default_factory=list)
+    dii_pct: list[Optional[float]] = Field(default_factory=list)
+    public_pct: list[Optional[float]] = Field(default_factory=list)
 
 
 class GovernanceData(BaseModel):
@@ -759,9 +775,9 @@ class RiskItem(BaseModel):
 
 class PeerDetailed(BaseModel):
     name: str
-    revenue_series: list[float] = Field(default_factory=list)
-    ebitda_margin_series: list[float] = Field(default_factory=list)
-    pat_series: list[float] = Field(default_factory=list)
+    revenue_series: list[Optional[float]] = Field(default_factory=list)
+    ebitda_margin_series: list[Optional[float]] = Field(default_factory=list)
+    pat_series: list[Optional[float]] = Field(default_factory=list)
     mcap_cr: Optional[float] = None
     pe: Optional[float] = None
     pb: Optional[float] = None
@@ -771,15 +787,40 @@ class PeerDetailed(BaseModel):
 
 class OperationalData(BaseModel):
     years: list[str] = Field(default_factory=list)
-    volume_segments: dict[str, list[float]] = Field(default_factory=dict)
-    capacity_utilisation_pct: list[float] = Field(default_factory=list)
-    countries_of_operation: list[float] = Field(default_factory=list)
-    plants_india: list[float] = Field(default_factory=list)
-    plants_overseas: list[float] = Field(default_factory=list)
+    volume_segments: dict[str, list[Optional[float]]] = Field(default_factory=dict)
+    capacity_utilisation_pct: list[Optional[float]] = Field(default_factory=list)
+    countries_of_operation: list[Optional[float]] = Field(default_factory=list)
+    plants_india: list[Optional[float]] = Field(default_factory=list)
+    plants_overseas: list[Optional[float]] = Field(default_factory=list)
     revenue_mix_pct: dict[str, float] = Field(default_factory=dict)
     geography_mix_pct: dict[str, float] = Field(default_factory=dict)
     realization_per_mt: Optional[float] = None
     employees: Optional[float] = None
+
+
+class BrokerForecast(BaseModel):
+    broker_name: str
+    date: Optional[str] = None
+    rating: Optional[str] = None
+    target_price: Optional[float] = None
+    key_takeaway: Optional[str] = None
+
+
+class ConsensusData(BaseModel):
+    analyst_count: Optional[float] = None
+    buy_pct: Optional[float] = None
+    consensus_rating: Optional[str] = None
+    target_high: Optional[float] = None
+    target_avg: Optional[float] = None
+    target_low: Optional[float] = None
+    # Forward consensus growth estimates (FY+1, FY+2, FY+3)
+    forecast_years: list[str] = Field(default_factory=list)
+    revenue_growth_pct: list[Optional[float]] = Field(default_factory=list)
+    ebitda_growth_pct: list[Optional[float]] = Field(default_factory=list)
+    pat_growth_pct: list[Optional[float]] = Field(default_factory=list)
+    eps_growth_pct: list[Optional[float]] = Field(default_factory=list)
+    # Individual broker recommendations
+    broker_forecasts: list[BrokerForecast] = Field(default_factory=list)
 
 
 class FinancialModelOutput(BaseModel):
@@ -808,6 +849,7 @@ class FinancialModelOutput(BaseModel):
     scenario_analysis: ScenarioAnalysis
     risk_items: list[RiskItem] = Field(default_factory=list)
     peers_detailed: list[PeerDetailed] = Field(default_factory=list)
+    consensus: Optional[ConsensusData] = None
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -1334,7 +1376,16 @@ Return ONLY valid JSON. Start with {{ end with }}. No prose, no markdown fences.
   "risk_items":[{{"category":str,"factor":str,"description":str,"mitigation":str,
                   "probability":"H|M|L","impact":"H|M|L","rating":"HIGH|MEDIUM|LOW"}} ...min 8],
   "peers_detailed":[{{"name":str,"revenue_series":[5],"ebitda_margin_series":[5],"pat_series":[5],
-                      "mcap_cr":n,"pe":n,"pb":n,"roce_pct":n,"roe_pct":n}} ...3-4 true peers]
+                      "mcap_cr":n,"pe":n,"pb":n,"roce_pct":n,"roe_pct":n}} ...3-4 true peers],
+  "consensus": {{
+    "analyst_count": n,
+    "buy_pct": n,
+    "consensus_rating": "Strong Buy|Buy|Hold|Sell|Strong Sell",
+    "target_high": n, "target_avg": n, "target_low": n,
+    "forecast_years": ["FY__E","FY__E","FY__E"],
+    "revenue_growth_pct": [3], "ebitda_growth_pct": [3], "pat_growth_pct": [3], "eps_growth_pct": [3],
+    "broker_forecasts": [{{"broker_name":str,"date":"MMM YYYY","rating":str,"target_price":n,"key_takeaway":str}} ...5-10 entries]
+  }}
 }}"""
 
     logger.info(f"🤖 Calling Claude API ({MODEL_NAME}) with web_search...")
@@ -3393,6 +3444,143 @@ def mk_governance(wb, ctx):
         ws.cell(row=r, column=3, value="Source: Annual Report / BSE filings").font = _ext_sub_font
         ws.cell(row=r, column=3).border = _ext_thin_border
         r += 1
+
+
+# ══════════════════════════════════════════════════════════════════
+# SHEET — Consensus
+# ══════════════════════════════════════════════════════════════════
+def mk_consensus(wb, ctx):
+    """Analyst Consensus & Broker Forecasts sheet."""
+    model = ctx.get("model") or {}
+    con = model.get("consensus")
+    if not con:
+        logger.info("  ⏭ Consensus: no data — skipping sheet")
+        return
+
+    ws, _ = _ext_new_sheet(wb, "Consensus")
+    company = ctx["company_name"]
+
+    # Column widths
+    ws.column_dimensions["A"].width = 32
+    for ci in range(2, 10):
+        ws.column_dimensions[get_column_letter(ci)].width = 18
+
+    _ext_title_banner(
+        ws,
+        f"{company} — Analyst Consensus",
+        "Broker ratings, target prices & forward estimates | Source: Analyst Reports / MCP Data",
+        7,
+    )
+
+    r = 4
+    # ── Section 1: Consensus Summary ──
+    _ext_section_divider(ws, r, 7, "CONSENSUS SUMMARY")
+    r += 1
+
+    cmp = _safe_num(ctx.get("cmp") or model.get("cmp"), 0)
+    analyst_count = _safe_num(con.get("analyst_count"), None)
+    buy_pct_raw = _safe_num(con.get("buy_pct"), None)
+    buy_pct = buy_pct_raw / 100 if buy_pct_raw is not None and buy_pct_raw > 1 else buy_pct_raw
+    consensus_rating = con.get("consensus_rating") or "—"
+    tgt_high = _safe_num(con.get("target_high"), None)
+    tgt_avg = _safe_num(con.get("target_avg"), None)
+    tgt_low = _safe_num(con.get("target_low"), None)
+
+    summary_rows = [
+        ("No. of Analysts", analyst_count, FMT_DAYS),
+        ("Buy %", buy_pct, FMT_PCT),
+        ("Consensus Rating", consensus_rating, None),
+        ("Current Market Price (₹)", cmp, FMT_INR),
+        ("Target Price — High (₹)", tgt_high, FMT_INR),
+        ("Target Price — Average (₹)", tgt_avg, FMT_INR),
+        ("Target Price — Low (₹)", tgt_low, FMT_INR),
+    ]
+    if tgt_avg and cmp:
+        upside = (tgt_avg / cmp) - 1
+        summary_rows.append(("Upside / Downside (Avg TP vs CMP)", upside, FMT_PCT))
+
+    for label, v, fmt in summary_rows:
+        ws.cell(row=r, column=1, value=label).font = _ext_label_font
+        ws.cell(row=r, column=1).border = _ext_thin_border
+        c = ws.cell(row=r, column=2, value=v if v is not None else "—")
+        if fmt and v is not None:
+            c.number_format = fmt
+        c.font = _ext_data_font
+        c.alignment = _ext_center
+        c.border = _ext_thin_border
+        r += 1
+
+    r += 1
+    # ── Section 2: Forward Consensus Growth Estimates ──
+    forecast_years = con.get("forecast_years") or []
+    if forecast_years:
+        _ext_section_divider(ws, r, 1 + len(forecast_years), "FORWARD CONSENSUS GROWTH ESTIMATES")
+        r += 1
+        # Header row
+        for ci, h in enumerate(["Metric"] + list(forecast_years), 1):
+            c = ws.cell(row=r, column=ci, value=h)
+            c.font = _ext_hdr_font
+            c.fill = _ext_navy_fill
+            c.alignment = _ext_center
+            c.border = _ext_thin_border
+        r += 1
+
+        growth_series = [
+            ("Revenue Growth %", con.get("revenue_growth_pct") or []),
+            ("EBITDA Growth %", con.get("ebitda_growth_pct") or []),
+            ("PAT Growth %", con.get("pat_growth_pct") or []),
+            ("EPS Growth %", con.get("eps_growth_pct") or []),
+        ]
+        alt = False
+        for label, vals in growth_series:
+            # Pad/truncate to forecast_years length
+            padded = list(vals)[:len(forecast_years)]
+            while len(padded) < len(forecast_years):
+                padded.append(None)
+            converted = []
+            for v in padded:
+                n = _safe_num(v, None)
+                if n is not None:
+                    converted.append(n / 100 if abs(n) > 1 else n)
+                else:
+                    converted.append(None)
+            _ext_write_data_row(ws, r, label, converted, FMT_PCT, 0, len(forecast_years), alt=alt)
+            alt = not alt
+            r += 1
+        r += 1
+
+    # ── Section 3: Broker Forecasts ──
+    brokers = con.get("broker_forecasts") or []
+    if brokers:
+        _ext_section_divider(ws, r, 7, "INDIVIDUAL BROKER FORECASTS")
+        r += 1
+        headers = ["Broker", "Date", "Rating", "Target Price (₹)", "Key Takeaway"]
+        for ci, h in enumerate(headers, 1):
+            c = ws.cell(row=r, column=ci, value=h)
+            c.font = _ext_hdr_font
+            c.fill = _ext_navy_fill
+            c.alignment = _ext_center
+            c.border = _ext_thin_border
+        r += 1
+
+        for bf in brokers:
+            if not isinstance(bf, dict):
+                continue
+            vals = [
+                bf.get("broker_name") or "—",
+                bf.get("date") or "—",
+                bf.get("rating") or "—",
+                _safe_num(bf.get("target_price"), None),
+                bf.get("key_takeaway") or "—",
+            ]
+            for ci, v in enumerate(vals, 1):
+                c = ws.cell(row=r, column=ci, value=v if v is not None else "—")
+                if ci == 4 and isinstance(v, (int, float)):
+                    c.number_format = FMT_INR
+                c.font = _ext_data_font
+                c.alignment = _ext_left_wrap if ci == 5 else _ext_center
+                c.border = _ext_thin_border
+            r += 1
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -5782,11 +5970,12 @@ def build_model(screener_path: str, screener_data: dict, model: dict, out_path: 
         mk_peer_charts(wb, ctx)
         mk_operational_data(wb, ctx)
         mk_governance(wb, ctx)
+        mk_consensus(wb, ctx)
         mk_timeline(wb, ctx)
         mk_op_charts(wb, ctx)
         # Charts MUST be built after mk_financials_table since it references its cells.
         mk_native_charts(wb, ctx)
-        logger.info("  ✅ Extended analytical sheets (14)")
+        logger.info("  ✅ Extended analytical sheets (15)")
     except Exception as ex:
         logger.exception("⚠ Extended sheets failed: %s", ex)
         diagnostics.append(f"Extended sheets build error: {ex}")

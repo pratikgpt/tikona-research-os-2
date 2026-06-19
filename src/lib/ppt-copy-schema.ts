@@ -207,12 +207,19 @@ export function sanitisePptContent(raw: unknown): Record<string, string> {
     }
     if (s.length > spec.max) {
       const trimmed = s.slice(0, spec.max);
-      // Cut at a paragraph break first, then word boundary, then hard cut.
       const lastPara = trimmed.lastIndexOf('\n\n');
+      // Find the last complete sentence boundary (. or ? or !)
+      const lastSentence = Math.max(
+        trimmed.lastIndexOf('. '),
+        trimmed.lastIndexOf('? '),
+        trimmed.lastIndexOf('! ')
+      );
       const lastSpace = trimmed.lastIndexOf(' ');
       const cut = lastPara > spec.max * 0.6
         ? lastPara
-        : (lastSpace > spec.max * 0.7 ? lastSpace : spec.max);
+        : (lastSentence > spec.max * 0.7
+          ? lastSentence + 1
+          : (lastSpace > spec.max * 0.75 ? lastSpace : spec.max));
       s = trimmed.slice(0, cut).trim();
     }
     out[key] = s;

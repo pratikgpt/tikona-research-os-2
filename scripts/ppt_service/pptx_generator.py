@@ -286,25 +286,37 @@ def _metric_chips(metadata: dict, fin_model: dict, company: dict) -> list[str]:
 
     years = operational.get("years") or []
     utils = operational.get("capacity_utilisation_pct") or []
-    if years and utils:
-        add(f"{utils[-1]:.0f}% Util.")
+    if years and utils and utils[-1] is not None:
+        try:
+            add(f"{float(utils[-1]):.0f}% Util.")
+        except (ValueError, TypeError):
+            pass
 
     employees = operational.get("employees")
     if employees:
-        add(f"{int(float(employees)):,} Staff")
+        try:
+            add(f"{int(float(employees)):,} Staff")
+        except (ValueError, TypeError):
+            pass
 
     plants_india = operational.get("plants_india") or []
     plants_over = operational.get("plants_overseas") or []
     if plants_india or plants_over:
-        india = int(plants_india[-1]) if plants_india else 0
-        over = int(plants_over[-1]) if plants_over else 0
-        total = india + over
-        if total > 0:
-            add(f"{total} Plants")
+        try:
+            india = int(plants_india[-1]) if (plants_india and plants_india[-1] is not None) else 0
+            over = int(plants_over[-1]) if (plants_over and plants_over[-1] is not None) else 0
+            total = india + over
+            if total > 0:
+                add(f"{total} Plants")
+        except (ValueError, TypeError):
+            pass
 
     countries = operational.get("countries_of_operation") or []
-    if countries:
-        add(f"{int(countries[-1])} Countries")
+    if countries and countries[-1] is not None:
+        try:
+            add(f"{int(countries[-1])} Countries")
+        except (ValueError, TypeError):
+            pass
 
     thesis = fin_model.get("thesis") or {}
     score = thesis.get("saarthi_total")
@@ -1361,19 +1373,30 @@ def map_replacements(company, metadata, fin_model, sections):
                 seq = [float(v) for v in (vals or [])]
                 if latest_idx < len(seq):
                     latest_total_volume += seq[latest_idx]
-    if countries:
-        overview_metrics.append(f"Operates across {int(countries[-1])} countries")
+    if countries and countries[-1] is not None:
+        try:
+            overview_metrics.append(f"Operates across {int(countries[-1])} countries")
+        except (ValueError, TypeError):
+            pass
     if plants_india or plants_overseas:
-        total_plants = (int(plants_india[-1]) if plants_india else 0) + (int(plants_overseas[-1]) if plants_overseas else 0)
-        if total_plants:
-            overview_metrics.append(f"{total_plants} recycling plants")
+        try:
+            p_ind = int(plants_india[-1]) if (plants_india and plants_india[-1] is not None) else 0
+            p_ovr = int(plants_overseas[-1]) if (plants_overseas and plants_overseas[-1] is not None) else 0
+            total_plants = p_ind + p_ovr
+            if total_plants:
+                overview_metrics.append(f"{total_plants} recycling plants")
+        except (ValueError, TypeError):
+            pass
     if latest_total_volume:
         overview_metrics.append(f"{int(latest_total_volume):,} MT latest throughput")
-    if utils:
-        latest_util = float(utils[-1])
-        if latest_util <= 1.0:
-            latest_util *= 100
-        overview_metrics.append(f"{latest_util:.0f}% utilisation")
+    if utils and utils[-1] is not None:
+        try:
+            latest_util = float(utils[-1])
+            if latest_util <= 1.0:
+                latest_util *= 100
+            overview_metrics.append(f"{latest_util:.0f}% utilisation")
+        except (ValueError, TypeError):
+            pass
     if m_cap_disp:
         overview_metrics.append(f"{m_cap_disp} market cap")
     bottom_overview = " | ".join(overview_metrics[:4])
