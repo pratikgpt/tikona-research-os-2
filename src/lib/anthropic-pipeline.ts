@@ -336,6 +336,14 @@ async function getFinancialModelPromptContext(sessionId?: string): Promise<Finan
     const peers = Array.isArray(model.peers) ? model.peers.slice(0, 6) : [];
     const projectionYears = Array.isArray(assumptions.projection_years) ? assumptions.projection_years.join(', ') : 'N/A';
 
+    let saarthiDimensionText = '';
+    const dims = thesis.saarthi_dimensions;
+    if (Array.isArray(dims) && dims.length > 0) {
+      saarthiDimensionText = dims.map((d: any) => {
+        return `- **${d.key} — ${d.name}:** ${d.score}/${d.max_score} (${d.rationale || ''})`;
+      }).join('\n');
+    }
+
     return {
       contextText: `
 ## Financial Model Snapshot
@@ -346,6 +354,7 @@ async function getFinancialModelPromptContext(sessionId?: string): Promise<Finan
 - Rating: ${String(model.rating ?? 'N/A')}
 - Upside %: ${String(model.upside_pct ?? 'N/A')}
 - SAARTHI: ${String(thesis.saarthi_total ?? 'N/A')} / 100 (${String(thesis.saarthi_rating ?? 'N/A')})
+${saarthiDimensionText ? `Detailed Dimension Scores:\n${saarthiDimensionText}\n` : ''}
 - FM Thesis: ${String(thesis.investment_thesis ?? '')}
 - Bull Case: ${String(thesis.bull_case ?? '')}
 - Bear Case: ${String(thesis.bear_case ?? '')}
@@ -740,7 +749,9 @@ Use web search to find the latest data about this company. Then generate the fol
 
 ## SAARTHI Scorecard
 
-Score each dimension with specific evidence. For each, give: the score (out of max), a 2-3 sentence justification with data, and key evidence from web search.
+IMPORTANT: You MUST use the exact dimension scores (S, A1, A2, R, T, H, I) and the total score provided in the "Financial Model Snapshot" context above. Do NOT re-calculate or assign new scores. You may copy the justifications/evidence or expand on them, but the numeric scores and total score must remain exactly identical to the financial model context.
+
+For each dimension, give: the score (out of max), a 2-3 sentence justification with data, and key evidence from web search.
 
 ### S — Scalability of Core Engine (out of 15)
 Can the business grow revenue 2-3x without proportional growth in capex, headcount, or working capital? Evaluate operating leverage, unit economics at scale, and digital/platform characteristics.
@@ -923,6 +934,9 @@ Apply the proprietary SAARTHI Scorecard (100-point system) with detailed analysi
 - **T — Track Record Through Adversity (max 10):** How did it behave during COVID, input cost spikes, demand slowdowns? Did it gain or lose market share during stress?
 - **H — Human Capital & Institutional DNA (max 10):** Is quality person-dependent or system-dependent? Evaluate management depth, succession planning, governance.
 - **I — Inflection Point Identification (max 15):** What specific event forces market repricing in 6–18 months? Be specific: new capacity, regulatory approval, margin expansion trigger.
+
+CRITICAL REQUIREMENT: For each dimension, copy the exact score (e.g. S: 12/15, A1: 8/10, etc.) and total score (e.g. 78/100) from the provided Stage 1 Investment Thesis in the context block. Do NOT re-calculate or change these numbers. Make sure they are identical.
+
 For each dimension, provide: the score (out of max), a 2-3 sentence justification with specific data, and key evidence.
 Sum all scores out of 100 and map to: STRONG BUY (85-100), BUY (70-84), ACCUMULATE (55-69), HOLD (40-54), UNDERPERFORM (25-39), SELL/AVOID (<25).
 
@@ -985,8 +999,8 @@ For each section from 2 to 12:
 - Do NOT use bullet-point-heavy formatting — write in dense analytical paragraphs
 
 CRITICAL ALIGNMENT RULE FOR ENTIRE REPORT:
-- The Target Price, Rating (Buy/Sell/Hold), and Upside Percentage MUST remain absolutely identical across every single section and MUST explicitly match the findings established in the Investment Thesis context.
-- DO NOT hallucinate, guess, or invent differing target prices or upside percentages anywhere in this generation.
+- The Target Price, Rating (Buy/Sell/Hold), Upside Percentage, and SAARTHI Scorecard (individual dimension scores and total score) MUST remain absolutely identical across every single section and MUST explicitly match the findings established in the Investment Thesis context.
+- DO NOT hallucinate, guess, or invent differing target prices, upside percentages, or SAARTHI scores anywhere in this generation.
 
 For sections 13 to 18:
 - Output ONLY the requested data values. Do not add any extra wording or paragraphs.
