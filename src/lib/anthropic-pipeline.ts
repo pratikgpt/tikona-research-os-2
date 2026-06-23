@@ -18,8 +18,6 @@ import {
   sanitisePptContent,
   type PptCopyMetadata,
 } from '@/lib/ppt-copy-schema';
-import { SSEMCPClient } from './mcp-client';
-
 // ========================
 // Anthropic Client
 // ========================
@@ -153,36 +151,7 @@ async function callAnthropicWithSearch(options: AnthropicCallOptions): Promise<A
     ? [{ type: 'web_search_20250305' as const, name: 'web_search', max_uses: 20 } as unknown as Anthropic.Tool]
     : [];
 
-  let mcpClient: SSEMCPClient | null = null;
-  let mcpTools: Anthropic.Tool[] = [];
-
-  // Connect to Go India Stocks MCP server if URL is configured
-  if (GOINDIA_MCP_URL) {
-    try {
-      mcpClient = new SSEMCPClient(GOINDIA_MCP_URL);
-      await mcpClient.connect(15000);
-      const mcpResult = await mcpClient.listTools();
-      if (mcpResult?.tools && Array.isArray(mcpResult.tools)) {
-        console.log(`[MCP] Discovered ${mcpResult.tools.length} tools from Go India Stocks MCP server`);
-        mcpTools = mcpResult.tools.map((t: any) => ({
-          name: t.name,
-          description: t.description || '',
-          input_schema: t.inputSchema || { type: 'object', properties: {} },
-        }));
-      }
-    } catch (err) {
-      console.warn('[MCP] Failed to connect/initialize MCP server:', err);
-    }
-  }
-
-  const combinedTools = [...baseTools, ...mcpTools];
-  const passedTools = combinedTools.length > 0 ? combinedTools : undefined;
-
-  // Append MCP guidelines to the system prompt dynamically if MCP tools are loaded
-  let finalSystemPrompt = systemPrompt;
-  if (mcpTools.length > 0) {
-    finalSystemPrompt += `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nGO INDIA STOCKS DATA INSTRUCTION — HIGH PRIORITY\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n- You have access to official Go India Stocks data tools.\n- For all company financial information, actual earnings numbers, balance sheets, segment performance, and projections, prioritize calling the Go India Stocks MCP tools.\n- This ensures the data in the report is 100% authentic and accurate. Do not rely on web search for these figures if the MCP tools can provide them.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  }
+  const passedTools = baseTools.length > 0 ? baseTools : undefined;
 
   let currentMessages: Anthropic.Messages.MessageParam[] = [
     { role: 'user', content: userPrompt }
@@ -193,109 +162,71 @@ async function callAnthropicWithSearch(options: AnthropicCallOptions): Promise<A
   let totalTokensUsed = 0;
   
   let loopCount = 0;
-  const maxLoops = 10;
+  const maxLoops = 15;
 
-  try {
-    while (loopCount < maxLoops) {
-      loopCount++;
-      console.log(`[Anthropic Pipeline] Sending message to Claude (turn ${loopCount})...`);
+  while (loopCount < maxLoops) {
+    loopCount++;
+    console.log(`[Anthropic Pipeline] Sending message to Claude (turn ${loopCount})...`);
 
-      // Use streaming to avoid Anthropic's 10-minute timeout on long requests.
-      const stream = client.messages.stream({
-        model,
-        max_tokens: maxTokens,
-        temperature,
-        system: finalSystemPrompt,
-        tools: passedTools,
-        messages: currentMessages,
-      });
+    // Use streaming to avoid Anthropic's 10-minute timeout on long requests.
+    const stream = client.messages.stream({
+      model,
+      max_tokens: maxTokens,
+      temperature,
+      system: systemPrompt,
+      tools: passedTools,
+      messages: currentMessages,
+    });
 
-      const response = await stream.finalMessage();
+    const response = await stream.finalMessage();
 
-      // Accumulate tokens
-      totalTokensUsed += (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
+    // Accumulate tokens
+    totalTokensUsed += (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
 
-      // Extract text and citations from the response
-      let responseText = '';
-      for (const block of response.content) {
-        if (block.type === 'text') {
-          responseText += block.text;
-          // Extract citations if present
-          if ('citations' in block && Array.isArray(block.citations)) {
-            for (const cite of block.citations) {
-              if ('url' in cite && typeof cite.url === 'string') {
-                citations.push(cite.url);
-              }
+    // Extract text and citations from the response
+    let responseText = '';
+    for (const block of response.content) {
+      if (block.type === 'text') {
+        responseText += block.text;
+        // Extract citations if present
+        if ('citations' in block && Array.isArray(block.citations)) {
+          for (const cite of block.citations) {
+            if ('url' in cite && typeof cite.url === 'string') {
+              citations.push(cite.url);
             }
           }
         }
       }
-
-      accumulatedText += responseText;
-
-      // Add assistant's response to history
-      currentMessages.push({ role: 'assistant', content: response.content });
-
-      if (response.stop_reason !== 'tool_use') {
-        break;
-      }
-
-      // Find tool calls
-      const toolUseBlocks = response.content.filter(
-        (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use'
-      );
-
-      if (toolUseBlocks.length === 0) {
-        break;
-      }
-
-      // Execute custom MCP tools
-      console.log(`[Anthropic Pipeline] Claude requested tool use:`, toolUseBlocks.map(b => b.name));
-
-      const toolResults = await Promise.all(
-        toolUseBlocks.map(async (toolUse) => {
-          const isMcpTool = mcpTools.some(t => t.name === toolUse.name);
-          if (isMcpTool && mcpClient) {
-            try {
-              console.log(`[MCP] Calling tool ${toolUse.name} via Go India Stocks MCP client with args:`, toolUse.input);
-              const mcpResult = await mcpClient.callTool(toolUse.name, toolUse.input);
-              const contentString = mcpResult.content
-                .filter((c: any) => c.type === 'text')
-                .map((c: any) => c.text)
-                .join('\n');
-              return {
-                type: 'tool_result' as const,
-                tool_use_id: toolUse.id,
-                content: contentString || JSON.stringify(mcpResult),
-              };
-            } catch (err) {
-              console.error(`[MCP] Tool call failed for ${toolUse.name}:`, err);
-              return {
-                type: 'tool_result' as const,
-                tool_use_id: toolUse.id,
-                content: `Error executing tool: ${err instanceof Error ? err.message : String(err)}`,
-                is_error: true,
-              };
-            }
-          } else {
-            return {
-              type: 'tool_result' as const,
-              tool_use_id: toolUse.id,
-              content: `Error: Unknown or unhandled tool ${toolUse.name}`,
-              is_error: true,
-            };
-          }
-        })
-      );
-
-      // Append tool results to history for next turn
-      currentMessages.push({ role: 'user', content: toolResults });
     }
-  } finally {
-    // Clean up connection
-    if (mcpClient) {
-      mcpClient.close();
+
+    accumulatedText += responseText;
+
+    // Add assistant's response to history
+    currentMessages.push({ role: 'assistant', content: response.content });
+
+    if (response.stop_reason !== 'tool_use') {
+      break;
     }
+
+    // Find tool calls
+    const toolUseBlocks = response.content.filter(
+      (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use'
+    );
+
+    if (toolUseBlocks.length === 0) {
+      break;
+    }
+
+    // Since we don't have custom tools anymore, any tool use here is unexpected or native.
+    const toolResults = toolUseBlocks.map((toolUse) => ({
+      type: 'tool_result' as const,
+      tool_use_id: toolUse.id,
+      content: `Error: Custom tools are not enabled in this session.`,
+      is_error: true,
+    }));
+
+    // Append tool results to history for next turn
+    currentMessages.push({ role: 'user', content: toolResults });
   }
 
   // Debug: log raw response for inspection in browser console
