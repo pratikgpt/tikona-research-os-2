@@ -360,6 +360,53 @@ RATIO = "0.00"
 # ══════════════════════════════════════════════════════════════════
 # SCREENER DOWNLOADER
 # ══════════════════════════════════════════════════════════════════
+def _resolve_screener_export(soup, company_url, default_csrf):
+    export_url = None
+    csrf_token = default_csrf
+
+    # Try button with aria-label
+    btn = soup.find("button", attrs={"aria-label": "Export to Excel"})
+    # Try button with export text (case-insensitive)
+    if not btn:
+        btn = soup.find("button", string=lambda t: t and "export" in str(t).lower())
+    # Try anchor with export in href
+    if not btn:
+        btn = soup.find("a", href=lambda h: h and "export" in str(h).lower())
+    # Try form whose action contains "export"
+    if not btn:
+        form = soup.find("form", action=lambda a: a and "export" in str(a).lower())
+        if form:
+            action = form.get("action", "")
+            export_url = action if action.startswith("http") else "https://www.screener.in" + action
+            ci = form.find("input", {"name": "csrfmiddlewaretoken"})
+            if ci:
+                csrf_token = ci["value"]
+
+    if btn and not export_url:
+        raw = btn.get("formaction", "") or btn.get("href", "")
+        export_url = raw if raw.startswith("http") else "https://www.screener.in" + raw
+        form = btn.find_parent("form")
+        ci = (form or soup).find("input", {"name": "csrfmiddlewaretoken"})
+        if ci:
+            csrf_token = ci["value"]
+
+    # Screener now uses a no-action POST form — submits back to the company page URL
+    if not export_url:
+        for f in soup.find_all("form"):
+            if f.get("action") is None and (f.get("method") or "").lower() == "post":
+                export_url = company_url
+                ci = f.find("input", {"name": "csrfmiddlewaretoken"})
+                if ci:
+                    csrf_token = ci["value"]
+                break
+
+    # Last-resort fallback
+    if not export_url:
+        export_url = company_url
+
+    return export_url, csrf_token
+
+
 def download_screener_excel(symbol: str, output_dir: str, screener_username: str, screener_password: str) -> str:
     import cloudscraper
 
@@ -424,49 +471,8 @@ def download_screener_excel(symbol: str, output_dir: str, screener_username: str
     page_csrf_input = soup.find("input", {"name": "csrfmiddlewaretoken"})
     csrf2_token = page_csrf_input["value"] if page_csrf_input else session.cookies.get("csrftoken", "")
 
-    export_url = None
-
-    # Try button with aria-label
-    btn = soup.find("button", attrs={"aria-label": "Export to Excel"})
-    # Try button with export text (case-insensitive)
-    if not btn:
-        btn = soup.find("button", string=lambda t: t and "export" in str(t).lower())
-    # Try anchor with export in href
-    if not btn:
-        btn = soup.find("a", href=lambda h: h and "export" in str(h).lower())
-    # Try form whose action contains "export"
-    if not btn:
-        form = soup.find("form", action=lambda a: a and "export" in str(a).lower())
-        if form:
-            action = form.get("action", "")
-            export_url = action if action.startswith("http") else "https://www.screener.in" + action
-            ci = form.find("input", {"name": "csrfmiddlewaretoken"})
-            if ci:
-                csrf2_token = ci["value"]
-
-    if btn and not export_url:
-        raw = btn.get("formaction", "") or btn.get("href", "")
-        export_url = raw if raw.startswith("http") else "https://www.screener.in" + raw
-        form = btn.find_parent("form")
-        ci = (form or soup).find("input", {"name": "csrfmiddlewaretoken"})
-        if ci:
-            csrf2_token = ci["value"]
-
-    # Screener now uses a no-action POST form — submits back to the company page URL
-    if not export_url:
-        for f in soup.find_all("form"):
-            if f.get("action") is None and (f.get("method") or "").lower() == "post":
-                export_url = company_url
-                ci = f.find("input", {"name": "csrfmiddlewaretoken"})
-                if ci:
-                    csrf2_token = ci["value"]
-                logger.info(f"  Found no-action POST form → submitting to {export_url}")
-                break
-
-    # Last-resort fallback
-    if not export_url:
-        export_url = company_url
-        logger.warning(f"⚠️  No export form found; POSTing to company URL: {export_url}")
+    # Resolve export URL using helper
+    export_url, csrf2_token = _resolve_screener_export(soup, company_url, csrf2_token)
 
     logger.info(f"📥 POSTing export: {export_url}")
     file_resp = session.post(
@@ -492,17 +498,8 @@ def download_screener_excel(symbol: str, output_dir: str, screener_username: str
         soup = BeautifulSoup(page_resp.text, "html.parser")
         page_csrf_input = soup.find("input", {"name": "csrfmiddlewaretoken"})
         csrf2_token = page_csrf_input["value"] if page_csrf_input else session.cookies.get("csrftoken", "")
-        # Re-find export URL on the standalone page
-        export_url_fb = None
-        for f in soup.find_all("form"):
-            if f.get("action") is None and (f.get("method") or "").lower() == "post":
-                export_url_fb = company_url
-                ci = f.find("input", {"name": "csrfmiddlewaretoken"})
-                if ci:
-                    csrf2_token = ci["value"]
-                break
-        if not export_url_fb:
-            export_url_fb = company_url
+        # Re-find export URL on the standalone page using the same logic
+        export_url_fb, csrf2_token = _resolve_screener_export(soup, company_url, csrf2_token)
         logger.info(f"📥 Retry POSTing export: {export_url_fb}")
         file_resp = session.post(
             export_url_fb,
