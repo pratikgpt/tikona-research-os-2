@@ -677,13 +677,64 @@ export default function PostProductionPanel({
           </button>
 
           {pptDataOpen && (
-            <div className="mt-3 pl-9">
-              <PPTDataPanel
-                reportId={reportId}
-                sessionId={sessionId}
-                serviceAvailable={serviceHealth === 'ok'}
-                onConfirmed={() => setPptDataConfirmed(true)}
-              />
+            <div className="mt-3 pl-9 space-y-4">
+              {!slideCopyReady ? (
+                <div className="rounded-lg border border-accent-100 bg-accent-50/40 p-4 space-y-3">
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-accent-600 shrink-0 text-lg font-semibold mt-0.5">✨</span>
+                    <div className="text-xs text-accent-950 leading-normal">
+                      <p className="font-semibold text-[13px] text-accent-900">AI Slide Copywriting Pass Required</p>
+                      <p className="mt-1 text-neutral-600">
+                        This step uses the LLM to summarize and format your research sections into 
+                        concise, professionally budgeted slide bullet points. Without this, the 
+                        review panel and final presentation will fall back to truncated raw report text.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      onClick={() => handleGenerateSlideCopy()}
+                      disabled={slideCopyGenerating || stage2Sections.length === 0}
+                      size="sm"
+                      className="rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-medium shadow-sm transition-all"
+                    >
+                      {slideCopyGenerating ? (
+                        <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Generating slide copy...</>
+                      ) : (
+                        <><FileEdit className="h-3.5 w-3.5 mr-1.5" /> Run AI Copywriting Pass (~30s)</>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between text-xs border-b border-neutral-100 pb-2 mb-2">
+                    <span className="text-green-700 font-semibold flex items-center gap-1.5 bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
+                      <Check className="h-3.5 w-3.5" /> AI Slide Copy is ready & fitted
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleGenerateSlideCopy()}
+                      disabled={slideCopyGenerating}
+                      className="text-accent-600 hover:text-accent-700 underline flex items-center gap-1 disabled:text-neutral-400 disabled:no-underline font-medium"
+                    >
+                      {slideCopyGenerating ? (
+                        <><Loader2 className="h-3 w-3 animate-spin" /> Regenerating...</>
+                      ) : (
+                        <><RefreshCw className="h-3 w-3" /> Re-run AI copywriting</>
+                      )}
+                    </button>
+                  </div>
+
+                  <PPTDataPanel
+                    reportId={reportId}
+                    sessionId={sessionId}
+                    serviceAvailable={serviceHealth === 'ok'}
+                    onConfirmed={() => setPptDataConfirmed(true)}
+                  />
+                </>
+              )}
             </div>
           )}
         </div>
@@ -720,29 +771,6 @@ export default function PostProductionPanel({
                   />
                   Mock planner (skip OpenRouter)
                 </label>
-              </div>
-              {/* Slide copywriting status + refresh control */}
-              <div className="flex items-center gap-3 text-xs">
-                <span
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded-full px-2 py-0.5',
-                    slideCopyReady
-                      ? 'bg-green-50 text-green-700 border border-green-200'
-                      : 'bg-neutral-50 text-neutral-500 border border-neutral-200',
-                  )}
-                  title="Per-placeholder LLM copy cached on the session"
-                >
-                  {slideCopyReady ? <Check className="h-3 w-3" /> : <FileEdit className="h-3 w-3" />}
-                  Slide copy {slideCopyReady ? 'ready' : 'not generated'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleGenerateSlideCopy()}
-                  disabled={slideCopyGenerating || pptxGenerating || stage2Sections.length === 0}
-                  className="text-[11px] text-accent-600 hover:text-accent-700 underline disabled:text-neutral-400 disabled:no-underline"
-                >
-                  {slideCopyGenerating ? 'Generating…' : (slideCopyReady ? 'Refresh slide copy' : 'Generate slide copy')}
-                </button>
               </div>
               {pptxGenerating && (
                 <div className="text-[11px] text-accent-600 animate-pulse mt-2 flex items-center gap-1.5">
