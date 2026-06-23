@@ -96,17 +96,15 @@ export default function StageReview({
       ) : (
         <>
           {/* Toolbar — expand toggle */}
-          {!isApproved && (
-            <div className="flex items-center justify-end px-4 py-2 border-b border-neutral-50">
-              <button
-                onClick={() => setIsFullHeight(!isFullHeight)}
-                className="p-1 rounded hover:bg-neutral-100 text-neutral-400 hover:text-neutral-600 transition-colors"
-                title={isFullHeight ? 'Collapse' : 'Expand full'}
-              >
-                {isFullHeight ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-              </button>
-            </div>
-          )}
+          <div className="flex items-center justify-end px-4 py-2 border-b border-neutral-50">
+            <button
+              onClick={() => setIsFullHeight(!isFullHeight)}
+              className="p-1 rounded hover:bg-neutral-100 text-neutral-400 hover:text-neutral-600 transition-colors"
+              title={isFullHeight ? 'Collapse' : 'Expand full'}
+            >
+              {isFullHeight ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </button>
+          </div>
 
           {/* Markdown content */}
           <div
@@ -119,14 +117,18 @@ export default function StageReview({
           />
 
           {/* Actions */}
-          {!isApproved && (
+          {(!isApproved || onRegenerate || onEdit) && (
             <div className="flex items-center gap-2 px-4 py-3 border-t border-neutral-100 bg-neutral-50/50">
-              <Button onClick={onApprove} size="sm" className="rounded-lg shadow-sm bg-accent-600 hover:bg-accent-700">
-                <Check className="h-3.5 w-3.5 mr-1.5" /> Approve & Continue
-              </Button>
-              <Button onClick={onRegenerate} variant="outline" size="sm" disabled={isGenerating} className="rounded-lg">
-                <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Regenerate
-              </Button>
+              {!isApproved && (
+                <Button onClick={onApprove} size="sm" className="rounded-lg shadow-sm bg-accent-600 hover:bg-accent-700">
+                  <Check className="h-3.5 w-3.5 mr-1.5" /> Approve & Continue
+                </Button>
+              )}
+              {onRegenerate && (
+                <Button onClick={onRegenerate} variant="outline" size="sm" disabled={isGenerating} className="rounded-lg">
+                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Regenerate
+                </Button>
+              )}
               {onEdit && (
                 <Button onClick={() => setIsEditing(true)} variant="ghost" size="sm" className="rounded-lg ml-auto">
                   <Edit3 className="h-3.5 w-3.5 mr-1.5" /> Edit
