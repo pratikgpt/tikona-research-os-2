@@ -141,6 +141,23 @@ export default function PostProductionPanel({
     return () => { cancelled = true; };
   }, []);
 
+  // Prevent browser reload/close from aborting active client-side generation processes
+  useEffect(() => {
+    if (!slideCopyGenerating && !pptxGenerating) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const msg = 'Generation is in progress. Reloading or leaving the page will abort the operation. Are you sure?';
+      e.preventDefault();
+      e.returnValue = msg;
+      return msg;
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [slideCopyGenerating, pptxGenerating]);
+
   // Restore from existing report
   // Detect whether the PPT copywriting pass has already run for this session.
   useEffect(() => {
