@@ -88,6 +88,7 @@ export default function PostProductionPanel({
   // --- PPT copywriting pass (slide-specific copy) ---
   const [slideCopyReady, setSlideCopyReady] = useState(false);
   const [slideCopyGenerating, setSlideCopyGenerating] = useState(false);
+  const [slideCopyProgress, setSlideCopyProgress] = useState<{ message: string; percent: number } | null>(null);
 
   // --- Service health ---
   const [serviceHealth, setServiceHealth] = useState<'checking' | 'ok' | 'down'>('checking');
@@ -274,6 +275,7 @@ export default function PostProductionPanel({
         sector || '',
         stage2Sections,
         meta,
+        (p) => setSlideCopyProgress({ message: p.message, percent: p.percent }),
       );
       await savePptContent(sessionId, content);
       setSlideCopyReady(true);
@@ -285,6 +287,7 @@ export default function PostProductionPanel({
       return false;
     } finally {
       setSlideCopyGenerating(false);
+      setSlideCopyProgress(null);
     }
   }, [slideCopyGenerating, stage2Sections, sessionId, companyName, nseSymbol, sector]);
 
@@ -691,40 +694,74 @@ export default function PostProductionPanel({
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Button
-                      type="button"
-                      onClick={() => handleGenerateSlideCopy()}
-                      disabled={slideCopyGenerating || stage2Sections.length === 0}
-                      size="sm"
-                      className="rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-medium shadow-sm transition-all"
-                    >
-                      {slideCopyGenerating ? (
-                        <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Generating slide copy...</>
-                      ) : (
-                        <><FileEdit className="h-3.5 w-3.5 mr-1.5" /> Run AI Copywriting Pass (~30s)</>
-                      )}
-                    </Button>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center gap-3">
+                      <Button
+                        type="button"
+                        onClick={() => handleGenerateSlideCopy()}
+                        disabled={slideCopyGenerating || stage2Sections.length === 0}
+                        size="sm"
+                        className="rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-medium shadow-sm transition-all"
+                      >
+                        {slideCopyGenerating ? (
+                          <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Generating slide copy...</>
+                        ) : (
+                          <><FileEdit className="h-3.5 w-3.5 mr-1.5" /> Run AI Copywriting Pass (~30s)</>
+                        )}
+                      </Button>
+                    </div>
+
+                    {slideCopyGenerating && slideCopyProgress && (
+                      <div className="space-y-1.5 max-w-md bg-accent-50/50 p-2.5 rounded-lg border border-accent-100/40">
+                        <div className="flex justify-between text-[11px]">
+                          <span className="text-accent-800 font-medium animate-pulse">{slideCopyProgress.message}</span>
+                          <span className="text-accent-700 font-bold">{slideCopyProgress.percent}%</span>
+                        </div>
+                        <div className="w-full bg-neutral-200/50 rounded-full h-1 overflow-hidden">
+                          <div 
+                            className="bg-accent-600 h-1 rounded-full transition-all duration-300"
+                            style={{ width: `${slideCopyProgress.percent}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center justify-between text-xs border-b border-neutral-100 pb-2 mb-2">
-                    <span className="text-green-700 font-semibold flex items-center gap-1.5 bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
-                      <Check className="h-3.5 w-3.5" /> AI Slide Copy is ready & fitted
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleGenerateSlideCopy()}
-                      disabled={slideCopyGenerating}
-                      className="text-accent-600 hover:text-accent-700 underline flex items-center gap-1 disabled:text-neutral-400 disabled:no-underline font-medium"
-                    >
-                      {slideCopyGenerating ? (
-                        <><Loader2 className="h-3 w-3 animate-spin" /> Regenerating...</>
-                      ) : (
-                        <><RefreshCw className="h-3 w-3" /> Re-run AI copywriting</>
-                      )}
-                    </button>
+                  <div className="flex flex-col gap-2 border-b border-neutral-100 pb-2 mb-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-green-700 font-semibold flex items-center gap-1.5 bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
+                        <Check className="h-3.5 w-3.5" /> AI Slide Copy is ready & fitted
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateSlideCopy()}
+                        disabled={slideCopyGenerating}
+                        className="text-accent-600 hover:text-accent-700 underline flex items-center gap-1 disabled:text-neutral-400 disabled:no-underline font-medium"
+                      >
+                        {slideCopyGenerating ? (
+                          <><Loader2 className="h-3 w-3 animate-spin" /> Regenerating...</>
+                        ) : (
+                          <><RefreshCw className="h-3 w-3" /> Re-run AI copywriting</>
+                        )}
+                      </button>
+                    </div>
+
+                    {slideCopyGenerating && slideCopyProgress && (
+                      <div className="space-y-1 mt-1 bg-accent-50/30 p-2 rounded-md border border-accent-100/40">
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-accent-800 font-medium animate-pulse">{slideCopyProgress.message}</span>
+                          <span className="text-accent-700 font-bold">{slideCopyProgress.percent}%</span>
+                        </div>
+                        <div className="w-full bg-neutral-200/50 rounded-full h-1 overflow-hidden">
+                          <div 
+                            className="bg-accent-600 h-1 rounded-full transition-all duration-300"
+                            style={{ width: `${slideCopyProgress.percent}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <PPTDataPanel
