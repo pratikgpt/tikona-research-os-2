@@ -35,9 +35,9 @@ import {
   createResearchReport,
   uploadDocument,
 } from '@/lib/api';
-import type { ResearchReport } from '@/types/database';
+import type { ResearchReport, SessionDocument } from '@/types/database';
 import { createRecommendation, hasRecommendationForSession } from '@/lib/recommendations-api';
-import type { RecommendationRating } from '@/types/recommendations';
+import type { RecommendationRating, PlanId } from '@/types/recommendations';
 import { runStage0, runStage1, runStage2, DEFAULT_PROMPTS, summarizeVaultDocuments } from '@/lib/anthropic-pipeline';
 import type { PromptOverrides } from '@/lib/anthropic-pipeline';
 import type { PipelineSession, PipelineProgress, PipelineStatus, SectorFramework } from '@/types/pipeline';
@@ -246,21 +246,21 @@ export default function ResearchPipeline() {
     // Restore vault documents
     getSessionDocuments(sessionId).then((docs) => {
       if (docs.length > 0) {
-        setVaultDocuments(docs.map((d: any) => ({
-          id: d.drive_file_id || d.document_id,
-          name: d.file_name || d.document_name,
+        setVaultDocuments(docs.map((d: SessionDocument) => ({
+          id: d.drive_file_id,
+          name: d.file_name,
           mimeType: d.mime_type || '',
           size: d.file_size || 0,
           viewUrl: d.view_url || '',
           downloadUrl: d.download_url || '',
-          type: d.document_type || 'other',
-          category: d.category || 'other',
+          type: (d.document_type || 'other') as VaultDocument['type'],
+          category: (d.category || 'other') as VaultDocument['category'],
           uploadedAt: d.created_at || new Date().toISOString(),
           parentFolderId: '',
         })));
       }
     }).catch(() => {});
-  }, [sessionId]);
+  }, [sessionId, selectedSector]);
 
   // --- Company Selection ---
   const handleSelectCompany = useCallback((company: MasterCompany) => {
@@ -425,7 +425,7 @@ export default function ResearchPipeline() {
   };
 
   // --- Save documents to session ---
-  const handleConfirmDocuments = async () => {
+  const handleConfirmDocuments = useCallback(async () => {
     if (!sessionId || vaultDocuments.length === 0) return;
 
     try {
@@ -446,7 +446,7 @@ export default function ResearchPipeline() {
     } catch {
       // Documents may already be saved
     }
-  };
+  }, [sessionId, vaultDocuments]);
 
   // --- Stage 0: Sector Framework ---
   const handleRunStage0 = useCallback(async (forceRegenerate = false) => {
@@ -487,7 +487,7 @@ export default function ResearchPipeline() {
       setIsRunning(false);
       setProgress(null);
     }
-  }, [sessionId, session, pipelineStatus, selectedSector, selectedModel, stage0Prompts]);
+  }, [sessionId, session, pipelineStatus, selectedSector, stage0Prompts, handleConfirmDocuments]);
 
   // --- Stage 1: Investment Thesis ---
   const handleRunStage1 = useCallback(async () => {
@@ -527,7 +527,7 @@ export default function ResearchPipeline() {
       setIsRunning(false);
       setProgress(null);
     }
-  }, [sessionId, session, pipelineStatus, financials, selectedSector, selectedModel, sectorFramework, stage1Prompts]);
+  }, [sessionId, session, pipelineStatus, financials, selectedSector, sectorFramework, stage1Prompts]);
 
   // --- Stage 2: Full Report ---
   const handleRunStage2 = useCallback(async () => {
@@ -581,7 +581,7 @@ export default function ResearchPipeline() {
       setIsRunning(false);
       setProgress(null);
     }
-  }, [sessionId, session, pipelineStatus, financials, selectedSector, selectedModel, stage1Thesis, sectorFramework, stage2Prompts]);
+  }, [sessionId, session, pipelineStatus, financials, selectedSector, stage1Thesis, sectorFramework, stage2Prompts]);
 
   // --- Approve Handlers ---
   const handleApprove = async (stage: 'stage0' | 'stage1' | 'stage2') => {
@@ -689,7 +689,7 @@ export default function ResearchPipeline() {
 
       // Extract data from report record (cs_ prefixed custom columns)
       // These columns may contain paragraphs — extract first number found
-      const extractFirstNumber = (v: any): number | null => {
+      const extractFirstNumber = (v: unknown): number | null => {
         if (v == null) return null;
         const s = String(v);
         // Match numbers like 1234, 1,234, 1234.56, ₹1,234.56
@@ -718,7 +718,7 @@ export default function ResearchPipeline() {
         target_price: targetPrice,
         validity_type: '1_year',
         validity_date: null,
-        plans: [(plan as any)],
+        plans: [plan as PlanId],
         trade_notes: null,
         report_file_url: report.pptx_pdf_file_url || report.pptx_file_url || null,
         session_id: sessionId,

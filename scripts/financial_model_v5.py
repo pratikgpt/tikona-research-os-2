@@ -663,11 +663,11 @@ class HistoricalRatios(BaseModel):
 
 class Peer(BaseModel):
     name: str
-    mcap_cr: float
-    pe: float
+    mcap_cr: Optional[float] = None
+    pe: Optional[float] = None
     ev_ebitda: Optional[float] = None
     ebitda_margin_pct: Any
-    roe_pct: float
+    roe_pct: Optional[float] = None
 
 
 class SaarthiScores(BaseModel):
@@ -1679,6 +1679,61 @@ def normalize_model_output(model: dict, screener_data: dict) -> dict:
             logger.warning("⚠ catalyst_timeline missing — synthesized from key_catalysts for %s", company_name)
         else:
             normalized["catalyst_timeline"] = []
+
+    # ── Normalize peer metrics ───────────────────────────────────────────
+    def clean_float(val) -> Optional[float]:
+        if val is None:
+            return None
+        if isinstance(val, str):
+            cleaned = val.strip().replace(",", "")
+            if cleaned.lower() in ("", "-", "n/a", "null", "none", "undefined"):
+                return None
+            try:
+                return float(cleaned)
+            except ValueError:
+                return None
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return None
+
+    raw_peers = normalized.get("peers")
+    if isinstance(raw_peers, list):
+        cleaned_peers = []
+        for p in raw_peers:
+            if isinstance(p, dict):
+                cleaned_p = dict(p)
+                cleaned_p["mcap_cr"] = clean_float(p.get("mcap_cr"))
+                cleaned_p["pe"] = clean_float(p.get("pe"))
+                cleaned_p["ev_ebitda"] = clean_float(p.get("ev_ebitda"))
+                cleaned_p["roe_pct"] = clean_float(p.get("roe_pct"))
+                cleaned_peers.append(cleaned_p)
+            else:
+                cleaned_peers.append(p)
+        normalized["peers"] = cleaned_peers
+
+    raw_peers_detailed = normalized.get("peers_detailed")
+    if isinstance(raw_peers_detailed, list):
+        cleaned_peers_detailed = []
+        for p in raw_peers_detailed:
+            if isinstance(p, dict):
+                cleaned_p = dict(p)
+                cleaned_p["mcap_cr"] = clean_float(p.get("mcap_cr"))
+                cleaned_p["pe"] = clean_float(p.get("pe"))
+                cleaned_p["pb"] = clean_float(p.get("pb"))
+                cleaned_p["roce_pct"] = clean_float(p.get("roce_pct"))
+                cleaned_p["roe_pct"] = clean_float(p.get("roe_pct"))
+                
+                # Also normalize series lists
+                for list_key in ("revenue_series", "ebitda_margin_series", "pat_series"):
+                    series = p.get(list_key)
+                    if isinstance(series, list):
+                        cleaned_p[list_key] = [clean_float(v) for v in series]
+                
+                cleaned_peers_detailed.append(cleaned_p)
+            else:
+                cleaned_peers_detailed.append(p)
+        normalized["peers_detailed"] = cleaned_peers_detailed
 
     return normalized
 

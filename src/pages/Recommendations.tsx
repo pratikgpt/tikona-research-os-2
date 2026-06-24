@@ -493,7 +493,7 @@ export default function Recommendations() {
         createdBy: user?.email ?? undefined,
       });
       setAllRecs(data);
-    } catch (e) {
+    } catch {
       toast.error('Failed to load recommendations');
     } finally {
       setIsLoading(false);

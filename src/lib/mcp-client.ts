@@ -8,7 +8,7 @@ export class SSEMCPClient {
   private postUrl: string | null = null;
   private pendingRequests = new Map<
     number | string,
-    { resolve: (val: any) => void; reject: (err: any) => void }
+    { resolve: (val: unknown) => void; reject: (err: unknown) => void }
   >();
   private nextId = 1;
   private resolvedUrl: string;
@@ -98,7 +98,7 @@ export class SSEMCPClient {
   /**
    * Sends a JSON-RPC 2.0 request to the message endpoint
    */
-  async sendRequest(method: string, params: any = {}): Promise<any> {
+  async sendRequest(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
     if (!this.postUrl) {
       throw new Error('Not connected to MCP server. Call connect() first.');
     }
@@ -139,15 +139,15 @@ export class SSEMCPClient {
   /**
    * Returns the list of tools exposed by the MCP server
    */
-  async listTools(): Promise<{ tools: Array<{ name: string; description?: string; inputSchema?: any }> }> {
-    return this.sendRequest('tools/list');
+  async listTools(): Promise<{ tools: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown> }> }> {
+    return this.sendRequest('tools/list') as Promise<{ tools: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown> }> }>;
   }
 
   /**
    * Calls a tool by name with arguments
    */
-  async callTool(name: string, args: any): Promise<{ content: Array<{ type: string; text?: string; [key: string]: any }>; isError?: boolean }> {
-    return this.sendRequest('tools/call', { name, arguments: args });
+  async callTool(name: string, args: Record<string, unknown>): Promise<{ content: Array<{ type: string; text?: string; [key: string]: unknown }>; isError?: boolean }> {
+    return this.sendRequest('tools/call', { name, arguments: args }) as Promise<{ content: Array<{ type: string; text?: string; [key: string]: unknown }>; isError?: boolean }>;
   }
 
   /**

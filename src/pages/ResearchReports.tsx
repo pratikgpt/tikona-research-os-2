@@ -227,7 +227,7 @@ export default function ResearchReports() {
                           {session.sector || '-'}
                         </td>
                         <td className="whitespace-nowrap px-4 py-4">
-                          <StatusBadge status={(session.current_state || session.status) as any} />
+                          <StatusBadge status={(session.current_state || session.status) as 'document_review' | 'drafting' | 'completed'} />
                         </td>
                         <td className="whitespace-nowrap px-4 py-4 text-sm text-neutral-500">
                           <div>{formatDate(session.created_at)}</div>

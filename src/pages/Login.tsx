@@ -47,7 +47,7 @@ export default function Login() {
   const handleGoogleSignIn = async () => {
     try {
       await signInWithGoogle();
-    } catch (err) {
+    } catch {
       toast.error('Failed to initiate sign in');
     }
   };

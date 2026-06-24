@@ -192,7 +192,7 @@ export function sanitisePptContent(raw: unknown): Record<string, string> {
       s = s.replace(/\n{2,}/g, '\n');
       // Normalise each line: ensure it starts with "• " and drop stray markers.
       s = s.split('\n').map((line) => {
-        const trimmed = line.trim().replace(/^[\-\*•●▪◦·#>\s]+/, '').trim();
+        const trimmed = line.trim().replace(/^[-*•●▪◦·#>\s]+/, '').trim();
         if (!trimmed) return '';
         return `• ${trimmed}`;
       }).filter(Boolean).join('\n');

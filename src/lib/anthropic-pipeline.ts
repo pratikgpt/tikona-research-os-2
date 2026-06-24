@@ -23,7 +23,6 @@ import {
 // ========================
 
 const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
-const GOINDIA_MCP_URL = import.meta.env.VITE_GOINDIA_MCP_URL;
 
 function getClient(): Anthropic {
   if (!ANTHROPIC_API_KEY) {
@@ -153,7 +152,7 @@ async function callAnthropicWithSearch(options: AnthropicCallOptions): Promise<A
 
   const passedTools = baseTools.length > 0 ? baseTools : undefined;
 
-  let currentMessages: Anthropic.Messages.MessageParam[] = [
+  const currentMessages: Anthropic.Messages.MessageParam[] = [
     { role: 'user', content: userPrompt }
   ];
 
@@ -270,7 +269,7 @@ async function getFinancialModelPromptContext(sessionId?: string): Promise<Finan
     let saarthiDimensionText = '';
     const dims = thesis.saarthi_dimensions;
     if (Array.isArray(dims) && dims.length > 0) {
-      saarthiDimensionText = dims.map((d: any) => {
+      saarthiDimensionText = dims.map((d: { key: string; name: string; score: number; max_score: number; rationale?: string }) => {
         return `- **${d.key} — ${d.name}:** ${d.score}/${d.max_score} (${d.rationale || ''})`;
       }).join('\n');
     }

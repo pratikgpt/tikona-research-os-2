@@ -9,7 +9,7 @@ interface StageReviewProps {
   isApproved: boolean;
   isGenerating: boolean;
   onApprove: () => void;
-  onRegenerate: () => void;
+  onRegenerate?: () => void;
   onEdit?: (content: string) => void;
   className?: string;
   maxHeight?: number;

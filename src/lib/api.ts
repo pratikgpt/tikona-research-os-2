@@ -1097,7 +1097,7 @@ export async function reorderPromptTemplates(
  * Publishes a report so it's visible to customers
  */
 export async function publishReport(reportId: string, plan?: string): Promise<void> {
-  const updatePayload: any = {
+  const updatePayload: { is_published: boolean; published_at: string; updated_at: string; plan?: string } = {
     is_published: true,
     published_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),

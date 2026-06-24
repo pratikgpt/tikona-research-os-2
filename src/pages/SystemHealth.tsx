@@ -567,7 +567,12 @@ export default function SystemHealth() {
     setRefreshing(false);
   }, [checkServices, loadN8nData, loadPipelineStats]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      refresh();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [refresh]);
 
   useEffect(() => {
     const t = setInterval(() => refresh(), 60000);

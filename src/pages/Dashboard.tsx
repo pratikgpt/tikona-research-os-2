@@ -171,7 +171,7 @@ export default function Dashboard() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <StatusBadge status={(session.current_state || session.status) as any} />
+                          <StatusBadge status={(session.current_state || session.status) as 'document_review' | 'drafting' | 'completed'} />
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-2">

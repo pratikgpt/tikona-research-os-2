@@ -50,7 +50,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   // All users are admin (admin-only app)
-  const determineRole = useCallback((_email: string | undefined): UserRole => {
+  const determineRole = useCallback((): UserRole => {
     return 'admin';
   }, []);
 
@@ -59,7 +59,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (newSession?.user) {
       setUser(newSession.user);
       setSession(newSession);
-      setRole(determineRole(newSession.user.email));
+      setRole(determineRole());
       setError(null);
     } else {
       setUser(null);
@@ -168,6 +168,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
