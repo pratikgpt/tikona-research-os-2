@@ -141,6 +141,7 @@ export default function ResearchPipeline() {
 
   // --- Recent Sessions ---
   const [recentSessions, setRecentSessions] = useState<PipelineSession[]>([]);
+  const [recentFilter, setRecentFilter] = useState<'all' | 'report_approved' | 'vault_ready' | 'sector_framework'>('all');
 
   // --- Report Section Tabs ---
   const [activeReportTab, setActiveReportTab] = useState(0);
@@ -800,6 +801,21 @@ export default function ResearchPipeline() {
   const currentStage = getStageNumber(pipelineStatus);
   const hasSession = !!sessionId;
 
+  const filteredSessions = recentSessions.filter((s) => {
+    if (recentFilter === 'all') return true;
+    const st = s.pipeline_status;
+    if (recentFilter === 'report_approved') {
+      return st === 'stage2_approved' || st === 'published' || st === 'stage2_review';
+    }
+    if (recentFilter === 'vault_ready') {
+      return st === 'vault_ready';
+    }
+    if (recentFilter === 'sector_framework') {
+      return st === 'stage0_approved' || st === 'stage0_review' || st === 'stage0_generating';
+    }
+    return true;
+  });
+
   // ========================
   // RENDER
   // ========================
@@ -978,13 +994,27 @@ export default function ResearchPipeline() {
               {/* Right Column: Recent Sessions */}
               <div className="lg:col-span-2">
                 <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden">
-                  <div className="px-5 py-3 border-b border-neutral-100 flex items-center gap-2">
-                    <Clock className="h-3.5 w-3.5 text-neutral-400" />
-                    <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Recent Pipelines</h3>
+                  <div className="px-5 py-3 border-b border-neutral-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-3.5 w-3.5 text-neutral-400" />
+                      <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Recent Pipelines</h3>
+                    </div>
+                    {recentSessions.length > 0 && (
+                      <select
+                        value={recentFilter}
+                        onChange={(e) => setRecentFilter(e.target.value as any)}
+                        className="text-[11px] font-medium text-neutral-500 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded px-2 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 cursor-pointer transition-all"
+                      >
+                        <option value="all">All Items</option>
+                        <option value="report_approved">Report Approved</option>
+                        <option value="vault_ready">Vault Ready</option>
+                        <option value="sector_framework">Sector Framework Approved</option>
+                      </select>
+                    )}
                   </div>
-                  {recentSessions.length > 0 ? (
+                  {filteredSessions.length > 0 ? (
                     <div className="divide-y divide-neutral-100">
-                      {recentSessions.map((s) => {
+                      {filteredSessions.map((s) => {
                         const st = (s.pipeline_status ?? 'company_selected') as PipelineStatus;
                         return (
                           <div
@@ -1016,7 +1046,9 @@ export default function ResearchPipeline() {
                   ) : (
                     <div className="p-8 text-center">
                       <FileText className="h-5 w-5 text-neutral-300 mx-auto mb-2" />
-                      <p className="text-xs text-neutral-400">No recent pipelines</p>
+                      <p className="text-xs text-neutral-400">
+                        {recentSessions.length > 0 ? 'No pipelines match this filter' : 'No recent pipelines'}
+                      </p>
                     </div>
                   )}
                 </div>

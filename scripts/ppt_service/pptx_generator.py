@@ -1081,13 +1081,15 @@ def _upload_to_gdrive(local_path: Path, filename: str, folder_id: str) -> dict |
 
 def sync_slides_to_pdf(report_id: str, ppt_file_id: str) -> dict:
     """
-    Triggers n8n convert-to-pdf webhook, downloads the converted PDF from Drive via n8n fetch-vault-pdfs,
-    uploads it to Supabase storage, and updates research_reports.pptx_pdf_file_url.
+    Triggers n8n convert-to-pdf webhook to download the updated PPTX from Drive,
+    converts it to PDF locally using LibreOffice, uploads it to Supabase storage,
+    and updates research_reports.pptx_pdf_file_url.
     """
     import requests
-    import base64
     import time
     import os
+    import tempfile
+    from pathlib import Path
     from datetime import datetime, timezone
     
     client = get_service_client()
@@ -1102,75 +1104,55 @@ def sync_slides_to_pdf(report_id: str, ppt_file_id: str) -> dict:
     
     # 2. Trigger convert-to-pdf n8n webhook
     convert_url = f"{n8n_base.rstrip('/')}/convert-to-pdf"
-    logger.info("Triggering n8n convert-to-pdf for file: %s", ppt_file_id)
+    logger.info("Triggering n8n convert-to-pdf (download) for file: %s", ppt_file_id)
     convert_res = requests.post(convert_url, json={"pptFileId": ppt_file_id}, timeout=180)
     if convert_res.status_code != 200:
-        raise RuntimeError(f"n8n convert-to-pdf failed ({convert_res.status_code}): {convert_res.text}")
+        raise RuntimeError(f"n8n convert-to-pdf download failed ({convert_res.status_code}): {convert_res.text}")
     
-    # n8n returns the PDF document info (e.g. { id, name, ... })
-    pdf_info = convert_res.json()
-    pdf_file_id = pdf_info.get("id")
-    if not pdf_file_id:
-        if isinstance(pdf_info, list) and pdf_info:
-            pdf_file_id = pdf_info[0].get("id")
-        else:
-            raise RuntimeError(f"Could not find PDF file ID in n8n convert response: {convert_res.text}")
+    pptx_bytes = convert_res.content
+    logger.info("Successfully downloaded PPTX binary from Drive via n8n (%d bytes)", len(pptx_bytes))
+    
+    # 3. Save PPTX bytes and convert to PDF locally using LibreOffice
+    with tempfile.TemporaryDirectory(prefix="pptsync_") as tmp:
+        tmp_dir = Path(tmp)
+        temp_pptx = tmp_dir / f"report_{report_id}.pptx"
+        temp_pptx.write_bytes(pptx_bytes)
+        
+        logger.info("Converting downloaded PPTX to PDF using LibreOffice...")
+        pdf_path = _convert_pptx_to_pdf(temp_pptx, tmp_dir)
+        if not pdf_path or not pdf_path.exists():
+            raise RuntimeError("LibreOffice PDF conversion failed during sync")
             
-    logger.info("n8n conversion successful. PDF Drive File ID: %s", pdf_file_id)
-    
-    # 3. Trigger fetch-vault-pdfs to download the PDF binary in base64
-    fetch_url = f"{n8n_base.rstrip('/')}/fetch-vault-pdfs"
-    payload = {
-        "files": [{
-            "id": pdf_file_id,
-            "name": "Report.pdf",
-            "mime_type": "application/pdf"
-        }]
-    }
-    logger.info("Downloading PDF file from Google Drive via fetch-vault-pdfs...")
-    fetch_res = requests.post(fetch_url, json=payload, timeout=180)
-    if fetch_res.status_code != 200:
-        raise RuntimeError(f"n8n fetch-vault-pdfs failed ({fetch_res.status_code}): {fetch_res.text}")
+        pdf_bytes = pdf_path.read_bytes()
+        logger.info("Successfully converted PPTX to PDF locally (%d bytes)", len(pdf_bytes))
         
-    fetch_data = fetch_res.json()
-    docs = fetch_data.get("documents") or []
-    if not docs:
-        raise RuntimeError(f"No documents returned by n8n fetch-vault-pdfs: {fetch_res.text}")
+        # 4. Upload PDF binary to Supabase Storage
+        ts = int(time.time())
+        pdf_key = f"{ticker}/{report_id}/report_{ts}_sync.pdf"
         
-    base64_data = docs[0].get("base64")
-    if not base64_data:
-        raise RuntimeError("Returned document does not contain base64 data")
+        client.storage.from_(PPTX_BUCKET).upload(
+            path=pdf_key,
+            file=pdf_bytes,
+            file_options={"content-type": "application/pdf", "upsert": "true"},
+        )
+        public_url_raw = client.storage.from_(PPTX_BUCKET).get_public_url(pdf_key)
+        pdf_url = _strip_qmark(public_url_raw)
+        logger.info("Uploaded synced PDF to Supabase storage: %s", pdf_url)
         
-    pdf_bytes = base64.b64decode(base64_data)
-    logger.info("Successfully fetched PDF binary (%d bytes)", len(pdf_bytes))
-    
-    # 4. Upload PDF binary to Supabase Storage
-    ts = int(time.time())
-    pdf_key = f"{ticker}/{report_id}/report_{ts}_sync.pdf"
-    
-    client.storage.from_(PPTX_BUCKET).upload(
-        path=pdf_key,
-        file=pdf_bytes,
-        file_options={"content-type": "application/pdf", "upsert": "true"},
-    )
-    public_url_raw = client.storage.from_(PPTX_BUCKET).get_public_url(pdf_key)
-    pdf_url = _strip_qmark(public_url_raw)
-    logger.info("Uploaded synced PDF to Supabase storage: %s", pdf_url)
-    
-    # 5. Update research_reports table
-    now_iso = datetime.now(timezone.utc).isoformat()
-    client.table("research_reports").update({
-        "pptx_pdf_file_path": pdf_key,
-        "pptx_pdf_file_url": pdf_url,
-        "updated_at": now_iso
-    }).eq("report_id", report_id).execute()
-    
-    return {
-        "status": "success",
-        "message": "Slides synced and PDF updated successfully",
-        "pptx_pdf_file_url": pdf_url,
-        "pptx_pdf_file_path": pdf_key
-    }
+        # 5. Update research_reports table
+        now_iso = datetime.now(timezone.utc).isoformat()
+        client.table("research_reports").update({
+            "pptx_pdf_file_path": pdf_key,
+            "pptx_pdf_file_url": pdf_url,
+            "updated_at": now_iso
+        }).eq("report_id", report_id).execute()
+        
+        return {
+            "status": "success",
+            "message": "Slides synced and PDF updated successfully",
+            "pptx_pdf_file_url": pdf_url,
+            "pptx_pdf_file_path": pdf_key
+        }
 
 
 
