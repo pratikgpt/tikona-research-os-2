@@ -3157,8 +3157,17 @@ def _render_key_risks_table(excel_path: str) -> bytes | None:
         bbox=[0, 0, 1, 1],
     )
     table.auto_set_font_size(False)
-    # Slightly smaller font + wider cells = text fits cleanly within rows.
-    table.set_fontsize(7.0)
+    # Auto-adjust font size based on total line count to prevent vertical overlapping/overflow
+    total_lines = sum(line_counts)
+    if total_lines > 50:
+        fontsize = 5.2
+    elif total_lines > 40:
+        fontsize = 6.0
+    elif total_lines > 30:
+        fontsize = 6.6
+    else:
+        fontsize = 7.2
+    table.set_fontsize(fontsize)
     _apply_row_line_heights(table, line_counts)
     color_map = {"H": "#D00000", "M": "#F5A623", "L": "#0B7D20", "MEDIUM": "#F5A623", "LOW": "#0B7D20", "HIGH": "#D00000"}
     for (r, c), cell in table.get_celld().items():
