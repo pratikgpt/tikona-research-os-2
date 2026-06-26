@@ -1249,7 +1249,7 @@ STEP 9 — STRUCTURED ANALYTICAL DATA (web search aggressively for these — the
 - Include: incorporation year, IPO year, major capex/expansion years, vision/guidance targets.
 
 (d) risk_items — minimum 8 detailed risks (replaces simple key_risks):
-- list of {{category, factor (one-line), description (1-2 sentences), mitigation, probability (H|M|L), impact (H|M|L), rating (HIGH|MEDIUM|LOW)}}
+- list of {{category, factor (one-line summary, max 10 words), description (concise explanation, max 25 words), mitigation (concise explanation, max 25 words), probability (H|M|L), impact (H|M|L), rating (HIGH|MEDIUM|LOW)}}
 - Differentiate ratings — not all MEDIUM. Match severity.
 
 (e) peers_detailed — 3-4 TRUE direct competitors (same business model & scale, NOT giant generic sector players):
@@ -1370,7 +1370,7 @@ Return ONLY valid JSON. Start with {{ end with }}. No prose, no markdown fences.
     "auditor_fees_audit_cr":n,"auditor_fees_non_audit_cr":n,"related_party_transactions_cr":n
   }},
   "timeline_events":[{{"year":str,"category":str,"description":str,"impact":str}} ...min 10],
-  "risk_items":[{{"category":str,"factor":str,"description":str,"mitigation":str,
+  "risk_items":[{{"category":str,"factor":"one line max 10 words","description":"max 25 words","mitigation":"max 25 words",
                   "probability":"H|M|L","impact":"H|M|L","rating":"HIGH|MEDIUM|LOW"}} ...min 8],
   "peers_detailed":[{{"name":str,"revenue_series":[5],"ebitda_margin_series":[5],"pat_series":[5],
                       "mcap_cr":n,"pe":n,"pb":n,"roce_pct":n,"roe_pct":n}} ...3-4 true peers],
