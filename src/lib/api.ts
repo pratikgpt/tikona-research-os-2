@@ -862,6 +862,27 @@ export async function updateCustomSection(
 }
 
 /**
+ * Updates the podcast_script column directly in research_reports.
+ */
+export async function updatePodcastScript(
+  reportId: string,
+  scriptText: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('research_reports')
+    .update({
+      podcast_script: scriptText,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('report_id', reportId);
+
+  if (error) {
+    throw new Error(`Failed to update podcast script: ${error.message}`);
+  }
+}
+
+
+/**
  * Updates the generated heading for a section in research_reports.
  * Default sections use `<key>_h`, custom sections use `cs_<key>_h`.
  */

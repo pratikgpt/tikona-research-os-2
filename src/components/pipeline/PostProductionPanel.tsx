@@ -18,6 +18,7 @@ import {
   syncSlidesToPdf,
   PPT_SERVICE_URL,
   updateCustomSection,
+  updatePodcastScript,
 } from '@/lib/api';
 import { runPptCopywriting } from '@/lib/anthropic-pipeline';
 import { savePptContent, getPptContent } from '@/lib/pipeline-api';
@@ -469,7 +470,7 @@ export default function PostProductionPanel({
     if (!reportId) return;
     setScriptSaving(true);
     try {
-      await updateCustomSection(reportId, 'podcast_script', newScript);
+      await updatePodcastScript(reportId, newScript);
       setLastSavedScript(newScript);
       if (showToast) {
         toast.success('Podcast script saved & confirmed!');
@@ -481,12 +482,30 @@ export default function PostProductionPanel({
     }
   }, [reportId]);
 
+  const handleResetScript = useCallback(async () => {
+    if (!reportId) return;
+    if (!window.confirm("Are you sure you want to delete this script? This will remove the script and you'll need to generate a new one.")) {
+      return;
+    }
+    setScriptSaving(true);
+    try {
+      await updatePodcastScript(reportId, '');
+      setPodcastScript(null);
+      setLastSavedScript(null);
+      toast.success('Podcast script deleted.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete script');
+    } finally {
+      setScriptSaving(false);
+    }
+  }, [reportId]);
+
   const handleGenerateAudio = useCallback(async () => {
     if (!reportId || !podcastScript) return;
     setAudioGenerating(true);
     try {
       // Ensure the latest script version is saved to the database first
-      await updateCustomSection(reportId, 'podcast_script', podcastScript);
+      await updatePodcastScript(reportId, podcastScript);
       setLastSavedScript(podcastScript);
 
       const response = await fetch(`${N8N_BASE}/synthesize-podcast`, {
@@ -1083,6 +1102,15 @@ export default function PostProductionPanel({
                       {scriptExpanded ? 'Hide Script' : 'Edit/View Script'}
                     </button>
                   </div>
+                  {podcastScript && !scriptSaving && (
+                    <button
+                      onClick={handleResetScript}
+                      disabled={scriptGenerating || audioGenerating}
+                      className="text-xs text-red-500 hover:text-red-700 hover:underline flex items-center gap-1 ml-2 disabled:opacity-50"
+                    >
+                      Delete Script
+                    </button>
+                  )}
                 </div>
 
                 {scriptExpanded && (
@@ -1095,7 +1123,21 @@ export default function PostProductionPanel({
                       spellCheck={false}
                       placeholder="Podcast script content..."
                     />
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-2">
+                      {podcastScript !== lastSavedScript && (
+                        <Button
+                          onClick={() => {
+                            setPodcastScript(lastSavedScript);
+                            toast.info('Discarded unsaved changes.');
+                          }}
+                          disabled={scriptSaving}
+                          size="xs"
+                          variant="outline"
+                          className="rounded-md px-2.5 py-1 text-[11px] h-7 text-neutral-500 bg-neutral-50 border-neutral-200 hover:bg-neutral-100"
+                        >
+                          Discard Edits
+                        </Button>
+                      )}
                       <Button
                         onClick={() => handleSaveScript(podcastScript || '', true)}
                         disabled={scriptSaving || podcastScript === lastSavedScript}

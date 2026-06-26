@@ -4265,16 +4265,45 @@ def _render_story_chart_collage(
         else:
             _empty(axes[0, 1], "Volume Sold")
 
-        # ── 3. Volume by Metal ─────────────────────────────────────────────
+        # ── 3. Volume by Category ──────────────────────────────────────────
+        # Determine dynamic category (e.g. Metal, Product, Segment)
+        explicit_category = op.get("volume_category_name") or op.get("volume_dimension") or op.get("volume_by_label")
+        if explicit_category and isinstance(explicit_category, str) and explicit_category.strip():
+            vol_category = explicit_category.strip()
+        else:
+            # Detect based on keys
+            detect_keys = list(volume_segments.keys()) if volume_segments else []
+            if not detect_keys:
+                metal_mix_temp = op.get("volume_by_metal") or op.get("metal_volume_pct") or {}
+                if isinstance(metal_mix_temp, dict):
+                    detect_keys = list(metal_mix_temp.keys())
+            
+            metals = {"lead", "zinc", "copper", "aluminum", "aluminium", "nickel", "iron", "steel", "gold", "silver", "cobalt", "brass", "bronze", "tin", "metal", "alloy", "scrap", "wire", "cable"}
+            products = {"polymer", "chemical", "plastic", "paper", "oil", "gas", "coal", "fuel", "material", "product", "battery", "batteries", "grid", "packaging"}
+            
+            keys_lower = [str(k).lower() for k in detect_keys]
+            metal_count = sum(1 for k in keys_lower if any(m in k for m in metals))
+            product_count = sum(1 for k in keys_lower if any(p in k for p in products))
+            
+            if metal_count > 0 and metal_count >= product_count:
+                vol_category = "Metal"
+            elif product_count > 0:
+                vol_category = "Product"
+            else:
+                vol_category = "Segment"
+
+        # Read volume unit dynamically from model data, defaulting to MT
+        vol_unit = op.get("volume_unit") or op.get("volume_units") or op.get("unit") or "MT"
+
         # Prefer the time-series segments shape (volume_segments dict over years).
         # Fall back to a single-year metal_volume_pct dict if that's all we have.
         if seg_years and volume_segments:
             bottoms = [0.0] * len(seg_years)
-            for idx, (name, vals) in enumerate(list(volume_segments.items())[:5]):
+            for idx, (name, vals) in enumerate(volume_segments.items()):
                 axes[0, 2].bar(seg_years, vals[:len(seg_years)], bottom=bottoms,
                                color=_PALETTE[idx % len(_PALETTE)], label=name)
                 bottoms = [b + v for b, v in zip(bottoms, vals[:len(bottoms)])]
-            _style_axes(axes[0, 2], "Volume by Metal (MT)", ylabel="MT")
+            _style_axes(axes[0, 2], f"{vol_category} Volume ({vol_unit})", ylabel=vol_unit)
             _pad_top(axes[0, 2], bottoms)
             axes[0, 2].legend(fontsize=7, frameon=False, loc="upper left")
         else:
@@ -4291,12 +4320,13 @@ def _render_story_chart_collage(
                     if fv <= 1.0:
                         fv *= 100.0
                     sizes_v.append(fv)
+
                 if sum(sizes_v) > 0:
-                    _render_pie(axes[0, 2], labels_v, sizes_v, "Volume by Metal")
+                    _render_pie(axes[0, 2], labels_v, sizes_v, f"{vol_category} Volume Mix")
                 else:
-                    _empty(axes[0, 2], "Volume by Metal")
+                    _empty(axes[0, 2], f"{vol_category} Volume")
             else:
-                _empty(axes[0, 2], "Volume by Metal")
+                _empty(axes[0, 2], f"{vol_category} Volume")
 
         # ── 4. Geographic Revenue Mix (India vs International) ─────────────
         # Prefer time-series if available, else donut of geography_mix_pct.
