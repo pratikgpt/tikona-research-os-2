@@ -40,8 +40,8 @@ import {
   Wifi,
   WifiOff,
   RefreshCw,
-  FileEdit,
-  FileText,
+  CheckCircle,
+  AlertCircle,
 } from 'lucide-react';
 import PPTDataPanel from './PPTDataPanel';
 
@@ -97,6 +97,8 @@ export default function PostProductionPanel({
   // --- Podcast ---
   const [scriptGenerating, setScriptGenerating] = useState(false);
   const [podcastScript, setPodcastScript] = useState<string | null>(null);
+  const [lastSavedScript, setLastSavedScript] = useState<string | null>(null);
+  const [scriptSaving, setScriptSaving] = useState(false);
   const [audioGenerating, setAudioGenerating] = useState(false);
   const [audioFileUrl, setAudioFileUrl] = useState<string | null>(null);
 
@@ -197,7 +199,13 @@ export default function PostProductionPanel({
     if (report.pptx_pdf_file_url) setPptxPdfFileUrl(report.pptx_pdf_file_url);
     if (report.ppt_file_id) setPptFileId(report.ppt_file_id);
     if (report.ppt_file_url) setPptFileUrl(report.ppt_file_url);
-    if (report.podcast_script) setPodcastScript(report.podcast_script);
+    if (report.podcast_script) {
+      setPodcastScript(report.podcast_script);
+      setLastSavedScript(report.podcast_script);
+    } else {
+      setPodcastScript(null);
+      setLastSavedScript(null);
+    }
     if (report.audio_file_url) setAudioFileUrl(report.audio_file_url);
     if (report.video_file_url) setVideoFileUrl(report.video_file_url);
     if (report.is_published) {
@@ -443,6 +451,7 @@ export default function PostProductionPanel({
 
       if (script) {
         setPodcastScript(script);
+        setLastSavedScript(script);
         toast.success('Podcast script generated!');
       } else {
         toast.error('Script generation timed out. Try refreshing in a minute.');
@@ -454,12 +463,19 @@ export default function PostProductionPanel({
     }
   }, [reportId, pollSupabaseColumn]);
 
-  const handleSaveScript = useCallback(async (newScript: string) => {
+  const handleSaveScript = useCallback(async (newScript: string, showToast = false) => {
     if (!reportId) return;
+    setScriptSaving(true);
     try {
       await updateCustomSection(reportId, 'podcast_script', newScript);
+      setLastSavedScript(newScript);
+      if (showToast) {
+        toast.success('Podcast script saved & confirmed!');
+      }
     } catch (err) {
-      console.error('[PostProduction] Failed to auto-save podcast script:', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to save script');
+    } finally {
+      setScriptSaving(false);
     }
   }, [reportId]);
 
@@ -467,8 +483,9 @@ export default function PostProductionPanel({
     if (!reportId || !podcastScript) return;
     setAudioGenerating(true);
     try {
-      // Auto-save the latest script version to database first
+      // Ensure the latest script version is saved to the database first
       await updateCustomSection(reportId, 'podcast_script', podcastScript);
+      setLastSavedScript(podcastScript);
 
       const response = await fetch(`${N8N_BASE}/synthesize-podcast`, {
         method: 'POST',
@@ -1045,47 +1062,116 @@ export default function PostProductionPanel({
               </Button>
             ) : (
               <>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-green-600 font-medium">Script ready</span>
-                  <button
-                    onClick={() => setScriptExpanded(!scriptExpanded)}
-                    className="text-xs text-neutral-400 hover:text-neutral-600 flex items-center gap-1"
-                  >
-                    {scriptExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                    {scriptExpanded ? 'Hide' : 'View'}
-                  </button>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {podcastScript !== lastSavedScript ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 animate-pulse">
+                        <AlertCircle className="h-3 w-3" /> Unconfirmed Edits
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-green-50 text-green-700 border border-green-200">
+                        <CheckCircle className="h-3 w-3" /> Script Confirmed
+                      </span>
+                    )}
+                    <button
+                      onClick={() => setScriptExpanded(!scriptExpanded)}
+                      className="text-xs text-neutral-400 hover:text-neutral-600 flex items-center gap-1 ml-1"
+                    >
+                      {scriptExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      {scriptExpanded ? 'Hide Script' : 'Edit/View Script'}
+                    </button>
+                  </div>
                 </div>
 
                 {scriptExpanded && (
-                  <textarea
-                    value={podcastScript}
-                    onChange={(e) => setPodcastScript(e.target.value)}
-                    onBlur={(e) => handleSaveScript(e.target.value)}
-                    className="w-full rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-800 font-mono leading-relaxed resize-y focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 focus-visible:border-accent-400"
-                    style={{ minHeight: '120px', maxHeight: '300px' }}
-                    spellCheck={false}
-                  />
+                  <div className="space-y-2">
+                    <textarea
+                      value={podcastScript || ''}
+                      onChange={(e) => setPodcastScript(e.target.value)}
+                      className="w-full rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-800 font-mono leading-relaxed resize-y focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 focus-visible:border-accent-400"
+                      style={{ minHeight: '120px', maxHeight: '300px' }}
+                      spellCheck={false}
+                      placeholder="Podcast script content..."
+                    />
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={() => handleSaveScript(podcastScript || '', true)}
+                        disabled={scriptSaving || podcastScript === lastSavedScript}
+                        size="xs"
+                        variant={podcastScript !== lastSavedScript ? 'default' : 'outline'}
+                        className={cn(
+                          'rounded-md px-2.5 py-1 text-[11px] h-7',
+                          podcastScript !== lastSavedScript
+                            ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm border-0'
+                            : 'text-neutral-500 bg-neutral-50 border-neutral-200'
+                        )}
+                      >
+                        {scriptSaving ? (
+                          <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Saving...</>
+                        ) : podcastScript !== lastSavedScript ? (
+                          <><Check className="h-3 w-3 mr-1" /> Confirm & Update Script</>
+                        ) : (
+                          <><Check className="h-3 w-3 mr-1 text-green-600" /> Saved & Confirmed</>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
                 )}
 
                 {!audioFileUrl ? (
-                  <Button
-                    onClick={handleGenerateAudio}
-                    disabled={audioGenerating || isAnyGenerating}
-                    size="sm"
-                    className="rounded-lg bg-accent-600 hover:bg-accent-700"
-                  >
-                    {audioGenerating ? (
-                      <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Generating Audio...</>
-                    ) : (
-                      <><Play className="h-3.5 w-3.5 mr-1.5" /> Generate Audio</>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <Button
+                        onClick={handleGenerateAudio}
+                        disabled={audioGenerating || isAnyGenerating || podcastScript !== lastSavedScript}
+                        size="sm"
+                        className={cn(
+                          'rounded-lg',
+                          podcastScript !== lastSavedScript
+                            ? 'bg-neutral-100 text-neutral-400 cursor-not-allowed border border-neutral-200 hover:bg-neutral-100'
+                            : 'bg-accent-600 hover:bg-accent-700 text-white'
+                        )}
+                      >
+                        {audioGenerating ? (
+                          <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Generating Audio...</>
+                        ) : (
+                          <><Play className="h-3.5 w-3.5 mr-1.5" /> Generate Audio</>
+                        )}
+                      </Button>
+                    </div>
+                    {podcastScript !== lastSavedScript && (
+                      <p className="text-[10px] text-amber-600 leading-normal animate-pulse">
+                        ⚠️ Please click <strong>"Confirm & Update Script"</strong> in the editor above to save your changes and enable audio generation.
+                      </p>
                     )}
-                  </Button>
+                  </div>
                 ) : (
-                  <div className="flex items-center gap-3">
-                    <audio controls src={audioFileUrl} className="h-8 flex-1" />
-                    <a href={audioFileUrl} download className="text-xs text-neutral-500 hover:text-neutral-700 flex items-center gap-1 shrink-0">
-                      <Download className="h-3 w-3" /> MP3
-                    </a>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <audio controls src={audioFileUrl} className="h-8 flex-1" />
+                      <a href={audioFileUrl} download className="text-xs text-neutral-500 hover:text-neutral-700 flex items-center gap-1 shrink-0">
+                        <Download className="h-3 w-3" /> MP3
+                      </a>
+                    </div>
+                    {podcastScript !== lastSavedScript && (
+                      <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-[10px] leading-normal space-y-1">
+                        <p className="font-semibold flex items-center gap-1">
+                          ⚠️ Unsaved Script Edits
+                        </p>
+                        <p className="text-amber-700">
+                          You have modified the script but the generated audio is still using the old version. Click <strong>"Confirm & Update Script"</strong> above, then you can regenerate the audio to update it.
+                        </p>
+                        <Button
+                          onClick={handleGenerateAudio}
+                          disabled={audioGenerating || isAnyGenerating}
+                          size="xs"
+                          variant="outline"
+                          className="mt-1 h-6 text-[10px] bg-white text-amber-800 border-amber-300 hover:bg-amber-100 hover:text-amber-900 rounded"
+                        >
+                          {audioGenerating ? 'Regenerating Audio...' : 'Regenerate Audio with Updated Script'}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </>
