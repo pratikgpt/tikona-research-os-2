@@ -3151,7 +3151,7 @@ def _render_key_risks_table(excel_path: str) -> bytes | None:
     ax.axis("off")
     table = ax.table(
         cellText=formatted,
-        cellLoc="center",
+        cellLoc="left",
         colWidths=col_widths,
         loc="upper left",
         bbox=[0, 0, 1, 1],
@@ -3168,17 +3168,20 @@ def _render_key_risks_table(excel_path: str) -> bytes | None:
             cell.set_facecolor("#1F4690")
             cell.get_text().set_color("white")
             cell.get_text().set_fontweight("bold")
+            cell.get_text().set_ha("center")
         else:
             txt = formatted[r][c]
             if c in {5, 6, 7}:
                 bg = color_map.get(txt, "#FFFFFF")
                 cell.set_facecolor(bg)
-                cell.get_text().set_color("white" if bg != "#F5A623" else "white")
+                cell.get_text().set_color("white")
                 cell.get_text().set_fontweight("bold")
+                cell.get_text().set_ha("center")
+            elif c == 0:
+                cell.set_facecolor("white")
+                cell.get_text().set_ha("center")
             else:
                 cell.set_facecolor("white")
-                if c in {1, 2, 3, 4}:
-                    _set_cell_left_align(cell)
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=220, bbox_inches="tight", pad_inches=0.02, facecolor=fig.get_facecolor())
     plt.close(fig)
