@@ -42,6 +42,8 @@ import {
   RefreshCw,
   CheckCircle,
   AlertCircle,
+  FileEdit,
+  FileText,
 } from 'lucide-react';
 import PPTDataPanel from './PPTDataPanel';
 
