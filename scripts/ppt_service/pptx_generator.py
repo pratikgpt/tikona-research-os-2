@@ -2531,19 +2531,32 @@ def _apply_row_line_heights(table, line_counts: list[int]) -> None:
     matplotlib ``Table`` cell heights are fractions of the axes that sum to
     ~1.0 by default (equal heights). We rebuild those fractions so rows with
     more wrapped lines receive more vertical space — eliminating the
-    "one cramped row clipping multi-line text" look. We also tighten the
-    cell's internal padding (default ``PAD=0.1`` reserves 20% of cell height
-    for top+bottom margin) so wrapped text actually fits inside its row, and
-    centre-align vertically so the visual baseline of multi-line cells lines
-    up with single-line cells in the same row.
+    "one cramped row clipping multi-line text" look. We also rebuild and
+    apply the vertical y-coordinates of the cells (via cell.set_y()) so that
+    cells do not overlap or leave gaps when their heights are resized.
+    We also tighten the cell's internal padding (default ``PAD=0.1`` reserves
+    20% of cell height for top+bottom margin) so wrapped text actually fits
+    inside its row, and centre-align vertically so the visual baseline of
+    multi-line cells lines up with single-line cells in the same row.
     """
     total = sum(line_counts)
     if total <= 0:
         return
+
+    # Calculate the bottom y-position for each row (top of table is y=1.0)
+    y_positions = []
+    current_y = 1.0
+    for lines in line_counts:
+        h = lines / total
+        current_y -= h
+        y_positions.append(current_y)
+
     cells = table.get_celld()
     for (r, _c), cell in cells.items():
         if 0 <= r < len(line_counts):
-            cell.set_height(line_counts[r] / total)
+            h = line_counts[r] / total
+            cell.set_height(h)
+            cell.set_y(y_positions[r])
             cell.set_text_props(verticalalignment="center")
             # Differential padding by row type:
             #   - Multi-line wrapped rows (risks / timeline / governance):
