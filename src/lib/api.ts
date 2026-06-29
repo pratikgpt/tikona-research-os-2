@@ -12,7 +12,9 @@ import type {
   PromptTemplate,
 } from '@/types/database';
 
-const N8N_BASE_URL = 'https://n8n.tikonacapital.com';
+// Use the proxy path so requests go through Vite dev proxy (local) and Vercel rewrite (production).
+// Calling n8n.tikonacapital.com directly from the browser causes CORS errors on Vercel.
+const N8N_BASE_URL = '/proxy/n8n';
 
 // Two URL strategies for the financial model service:
 //
@@ -261,6 +263,12 @@ export async function createVault(ticker: string, sector: string): Promise<Vault
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(requestBody),
+    signal: AbortSignal.timeout(90_000), // 90s guard — n8n must respond within 90 seconds
+  }).catch((err: unknown) => {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new Error('Drive vault creation timed out after 90 seconds. Check that your n8n workflow is running and the webhook is responsive.');
+    }
+    throw err;
   });
 
   console.log('[API] Response status:', response.status);
